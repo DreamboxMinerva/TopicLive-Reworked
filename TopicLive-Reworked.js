@@ -4,8 +4,6 @@
 // @description   Affiche les nouveaux messages d'un topic en direct.
 // @author        StrangerFruit, sur une base de : moyaona, lantea/atlantis, kiwec
 // @match         https://www.jeuxvideo.com/forums/*
-// @downloadURL   https://github.com/moyaona/TopicLivePlus/raw/refs/heads/main/TopicLivePlus.user.js
-// @updateURL     https://github.com/moyaona/TopicLivePlus/raw/refs/heads/main/TopicLivePlus.user.js
 // @updateURL   https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js?nocache=1
 // @downloadURL https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js?nocache=1
 // @run-at        document-end
