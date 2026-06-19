@@ -8,7 +8,7 @@
 // @downloadURL https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
-// @icon          https://image.noelshack.com/fichiers/2025/35/4/1756403430-image.png
+// @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
 // @version       0.5
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
