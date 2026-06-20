@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.5
+// @version       0.6
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @connect       tiktok.com
@@ -23,9 +23,29 @@
 // ==/UserScript==
 
 
-/**
- * Représente une page de topic et gère l'analyse du DOM pour en extraire les messages.
- */
+async function extractPayloadGzip() {
+    const scripts = document.getElementsByTagName('script');
+    for (let s of scripts) {
+        const content = s.textContent || '';
+        if (content.includes('forumsAppPayload')) {
+            const match = content.match(/forumsAppPayload\s*=\s*["']?([^"']+)["']?/);
+            if (match && match[1]) {
+                try {
+                    const binaryString = atob(match[1]);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+                    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+                    const decompressed = await new Response(stream).text();
+                    return JSON.parse(decompressed);
+                } catch(e) {
+                    return null;
+                }
+            }
+        }
+    }
+    return null;
+}
+
 class Page {
     constructor($page) {
         this.$page = $page;
@@ -294,69 +314,72 @@ class Message {
     }
 
   fixCitation(timestamp, hash) {
-    // Reconstruit le bloc d'actions si le bouton citer est absent (nouveaux messages live)
     if (this.$message.find('.messageUser__action[title="Citer le message"]').length === 0) {
         this.buildActionButtons();
     }
 
     this.$message.find('.messageUser__action[title="Citer le message"]').off('click').on('click', () => {
-        $.ajax({
-            type: 'POST',
-            url: '/forums/ajax_citation.php',
-            data: {
-                id_message: this.id_message,
-                ajax_timestamp: timestamp,
-                ajax_hash: hash
-            },
-            dataType: 'json',
-            timeout: 5000,
-            success: ({ txt }) => {
-                const $msg = TL.formu.obtenirMessage();
-                const datePropre = this.date.trim().replace(/\s+/g, ' ');
-                const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
-                let nvmsg = `> Le ${datePropre} ${pseudoPropre} a écrit :\n>`;
-                nvmsg += `${txt.split('\n').join('\n> ')}\n\n`;
-                if ($msg[0].value === '') {
-                    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msg[0], `${nvmsg}\n`);
-                } else {
-                    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msg[0], `${$msg[0].value}\n\n${nvmsg}`);
-                }
-                $msg[0].dispatchEvent(new Event("input", { bubbles: true }));
-                location.hash = '#forums-post-message-editor';
-                setTimeout(() => { $msg[0].focus(); }, 50);
-            },
-            error: this.fixCitation.bind(this, timestamp, hash)
-        });
+        const $msg = TL.formu.obtenirMessage();
+        const datePropre = this.date.trim().replace(/\s+/g, ' ');
+        const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
+        const contentNode = this.trouver(TL.class_contenu)[0];
+        const txt = contentNode ? contentNode.innerText.trim() : '';
+
+        let nvmsg = `> Le ${datePropre} ${pseudoPropre} a écrit :\n>`;
+        nvmsg += `${txt.split('\n').join('\n> ')}\n\n`;
+
+        if ($msg[0].value === '') {
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msg[0], `${nvmsg}\n`);
+        } else {
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msg[0], `${$msg[0].value}\n\n${nvmsg}`);
+        }
+        $msg[0].dispatchEvent(new Event("input", { bubbles: true }));
+        location.hash = '#forums-post-message-editor';
+        setTimeout(() => { $msg[0].focus(); }, 50);
     });
 }
 
 buildActionButtons() {
+    const actions = TL.messagesActionsMap ? TL.messagesActionsMap[this.id_message] : null;
+    const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
+    const pmUrl = actions?.privateMessage?.url || `https://www.jeuxvideo.com/messages-prives/nouveau.php?all_dest=${encodeURIComponent(pseudoPropre)}`;
+    const blacklistUrl = actions?.blacklist?.url || null;
+    const reportUrl = actions?.report?.url || null;
+
     const innerHtml = `
-        <div class="messageUser__inlineActions">
-            <button type="button" class="messageUser__action" title="Citer le message">
+        <div class="tl-inline-actions" style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="messageUser__action tl-quote-btn" title="Citer le message">
                 <i class="messageUser__actionIcon icon-quotes"></i>
                 <span class="messageUser__actionLabel">Citer le message</span>
             </button>
         </div>
-        <div class="messageUser__moreContainer">
-            <button class="messageUser__moreButton" type="button" aria-label="Plus d'actions">
-                <i class="messageUser__actionIcon icon-more"></i>
-            </button>
-            <div class="messageUser__modalContainer" style="display:none;">
-                <div class="messageUser__fills">
-                    <button class="messageUser__action" type="button" title="Faire un signalement">
-                        <i class="messageUser__actionIcon icon-signaler"></i>
-                        <span class="messageUser__actionLabel messageUser__actionLabel--showLabel">Faire un signalement</span>
-                    </button>
-                    <button class="messageUser__action" type="button" title="Blacklister">
-                        <i class="messageUser__actionIcon icon-black-list"></i>
-                        <span class="messageUser__actionLabel messageUser__actionLabel--showLabel">Blacklister</span>
-                    </button>
-                    <button type="button" class="messageUser__cancel">Annuler</button>
-                </div>
-            </div>
-            <div class="messageUser__overlay" aria-hidden="true" style="display:none;"></div>
-        </div>`;
+        <div class="tl-more-wrap" style="position:relative; display:inline-block;">
+       <button class="tl-more-btn" type="button" aria-label="Plus d'actions" style="background:transparent;border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;">
+    <i class="messageUser__actionIcon icon-more"></i>
+</button>
+     <div class="tl-more-menu" style="
+    display:none;
+    position:absolute;
+    top:calc(100% + 8px);
+    right:0;
+    width:248px;
+    background:rgb(44,49,58);
+    border-radius:10px;
+    z-index:99999;
+    flex-direction:column;
+    padding:8px 0;
+    box-shadow:0 4px 16px rgba(0,0,0,0.3);
+">
+    ${reportUrl ? `<button class="tl-menu-item tl-report-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:500;text-align:left;color:#ef4444;">
+        <i class="icon-signaler" style="font-size:20px;width:22px;flex-shrink:0;"></i><span>Faire un signalement</span>
+    </button>` : ''}
+    ${blacklistUrl ? `<button class="tl-menu-item tl-blacklist-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:500;text-align:left;color:#e5e7eb;">
+        <i class="icon-black-list" style="font-size:20px;width:22px;flex-shrink:0;color:#9ca3af;"></i><span>Blacklister</span>
+    </button>` : ''}
+    <a href="${pmUrl}" target="_blank" class="tl-menu-item" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:500;text-align:left;color:#e5e7eb;text-decoration:none;">
+        <i class="icon-pm" style="font-size:20px;width:22px;flex-shrink:0;color:#9ca3af;"></i><span>Envoyer un message privé</span>
+    </a>
+</div>`;
 
     let $headerActions = this.$message.find('.messageUser__headerActions');
     if ($headerActions.length === 0) {
@@ -366,61 +389,48 @@ buildActionButtons() {
             $headerActions = this.$message.find('.messageUser__headerActions');
         }
     }
-    if ($headerActions.length > 0 && $headerActions.find('.messageUser__action').length === 0) {
+    if ($headerActions.length > 0 && $headerActions.find('.tl-quote-btn').length === 0) {
         $headerActions.html(innerHtml);
 
-        const $moreContainer = $headerActions.find('.messageUser__moreContainer');
-        const $moreButton = $moreContainer.find('.messageUser__moreButton');
-        const $modal = $moreContainer.find('.messageUser__modalContainer');
-        const $overlay = $moreContainer.find('.messageUser__overlay');
+        const $wrap = $headerActions.find('.tl-more-wrap');
+        const $moreButton = $wrap.find('.tl-more-btn');
+        const $menu = $wrap.find('.tl-more-menu');
 
-        const openModal = () => { $modal.css({ 'display': 'flex', 'opacity': '1', 'visibility': 'visible' }); $overlay.css('display', 'block'); };
-        const closeModal = () => { $modal.css('display', 'none'); $overlay.css('display', 'none'); };
+        $headerActions.find('.tl-menu-item').hover(
+            function() { $(this).css('background', 'rgba(255,255,255,0.08)'); },
+            function() { $(this).css('background', 'transparent'); }
+        );
 
-      console.log('[TL DEBUG] moreButton trouvé:', $moreButton.length);
-        $moreButton.on('click', function(e) {
-          console.log('[TL DEBUG] clic détecté');
+        const openModal = () => $menu.css('display', 'flex');
+        const closeModal = () => $menu.css('display', 'none');
+
+        $moreButton.off('click').on('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-           console.log('[TL DEBUG] display actuel avant clic:', $modal.css('display'));
-if ($modal.css('display') === 'flex') { closeModal(); } else { openModal(); }
-console.log('[TL DEBUG] display après appel:', $modal.css('display'));
-          console.log('[TL DEBUG] position modal:', $modal.offset());
-console.log('[TL DEBUG] taille modal:', $modal.width(), $modal.height());
-console.log('[TL DEBUG] z-index modal:', $modal.css('z-index'));
-console.log('[TL DEBUG] parent overflow:', $modal.parent().css('overflow'));
+            if ($menu.css('display') === 'flex') { closeModal(); } else { openModal(); }
         });
 
-        $overlay.on('click', closeModal);
-        $moreContainer.find('.messageUser__cancel').on('click', closeModal);
+        $(document).off(`click.tlmenu-${this.id_message}`).on(`click.tlmenu-${this.id_message}`, (e) => {
+            if (!$(e.target).closest($wrap).length) closeModal();
+        });
 
-        $moreContainer.find('.messageUser__action[title="Faire un signalement"]').on('click', () => {
-            closeModal();
-            $.ajax({
-                url: '/forums/ajax_signalement.php',
-                data: { id_message: this.id_message, ajax_hash: TL.ajaxHash },
-                dataType: 'json',
-                success: ({ erreur }) => {
-                    if (erreur && erreur.length) { TL.alert(erreur); } else { TL.alert('Message signalé.'); }
-                },
-                error: () => TL.alert('Erreur lors du signalement.')
+
+
+        if (reportUrl) {
+            $wrap.find('.tl-report-btn').off('click').on('click', () => {
+                closeModal();
+                window.open(reportUrl, 'signalement', 'width=600,height=500');
             });
-        });
+        }
 
-        $moreContainer.find('.messageUser__action[title="Blacklister"]').on('click', () => {
-            closeModal();
-            $.ajax({
-                url: '/forums/ajax_forum_blacklist.php',
-                data: {
-                    id_alias_msg: this.$message.attr('data-id-alias'),
-                    action: 'add',
-                    ajax_hash: $('#ajax_hash_preference_user').val()
-                },
-                dataType: 'json',
-                success: ({ erreur }) => {
-                    if (erreur && erreur.length) { TL.alert(erreur); } else { document.location.reload(); }
-                }
+        if (blacklistUrl) {
+            $wrap.find('.tl-blacklist-btn').off('click').on('click', () => {
+                closeModal();
+                fetch(blacklistUrl, { credentials: 'include' })
+                    .then(() => { this.$message.css('opacity', '0.4'); })
+                    .catch(err => console.error('[TopicLive+] Erreur blacklist:', err));
             });
-        });
+        }
     }
 }
     initPartialQuote() {
@@ -697,10 +707,10 @@ observerLeBouton(selecteurBouton) {
 
     afficherErreurs(msg) { TL.alert(msg); }
 
-    obtenirMessage($form) {
-        if (typeof $form == 'undefined') $form = this.obtenirFormulaire();
-        return $form.find('#message_topic');
-    }
+ obtenirMessage($form) {
+    if (typeof $form == 'undefined') $form = this.obtenirFormulaire();
+    return $form.find('#message_topic, #message_reponse');
+}
 
     obtenirFormulaire($page) {
         if (typeof $page === 'undefined') $page = $(document);
@@ -1056,6 +1066,15 @@ class TopicLive {
         this.ajaxHash = $('#ajax_hash_liste_messages').val();
         this.estMP = false;
         this.url = document.URL;
+
+      this.messagesActionsMap = {};
+extractPayloadGzip().then(payload => {
+    if (payload && payload.listMessage) {
+        for (const msg of payload.listMessage) {
+            this.messagesActionsMap[msg.id] = msg.actions;
+        }
+    }
+});
 
         // ── NOUVEAU : sélecteurs adaptés à la nouvelle interface React JVC ──
         this.class_msg = '.messageUser';
