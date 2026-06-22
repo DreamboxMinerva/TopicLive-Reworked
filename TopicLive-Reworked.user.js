@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.6
+// @version       0.7
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @connect       tiktok.com
@@ -172,7 +172,7 @@ class Page {
                     nvMsg.$message.hide();
                     nvMsg.fixAvatar();
                     nvMsg.fixBlacklist();
-                    nvMsg.fixCitation(TL.ajaxTs, TL.ajaxHash);
+                    setTimeout(() => { nvMsg.fixCitation(TL.ajaxTs, TL.ajaxHash); }, 1500);
                     nvMsg.initPartialQuote();
                     nvMsg.fixDeroulerCitation();
                     nvMsg.fixImages();
@@ -357,27 +357,29 @@ buildActionButtons() {
        <button class="tl-more-btn" type="button" aria-label="Plus d'actions" style="background:transparent;border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;">
     <i class="messageUser__actionIcon icon-more"></i>
 </button>
-     <div class="tl-more-menu" style="
+  <div class="tl-more-menu" style="
     display:none;
     position:absolute;
     top:calc(100% + 8px);
     right:0;
-    width:248px;
-    background:rgb(44,49,58);
-    border-radius:10px;
+    width:250px;
+    background:rgb(46,50,56);
+    border-radius:12px;
+    border:1px solid rgb(74,76,79);
+    box-shadow:rgba(0,0,0,0.14) 0px 2px 4px -1px, rgba(0,0,0,0.098) 0px 4px 5px 0px, rgba(0,0,0,0.082) 0px 1px 10px 0px;
     z-index:99999;
     flex-direction:column;
-    padding:8px 0;
-    box-shadow:0 4px 16px rgba(0,0,0,0.3);
+    padding:10px 0;
+    gap:14px;
 ">
-    ${reportUrl ? `<button class="tl-menu-item tl-report-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:500;text-align:left;color:#ef4444;">
-        <i class="icon-signaler" style="font-size:20px;width:22px;flex-shrink:0;"></i><span>Faire un signalement</span>
+    ${reportUrl ? `<button class="tl-menu-item tl-report-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
+        <i class="icon-signaler" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:#e74c3c;display:inline-flex;align-items:center;justify-content:center;"></i><span>Faire un signalement</span>
     </button>` : ''}
-    ${blacklistUrl ? `<button class="tl-menu-item tl-blacklist-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:500;text-align:left;color:#e5e7eb;">
-        <i class="icon-black-list" style="font-size:20px;width:22px;flex-shrink:0;color:#9ca3af;"></i><span>Blacklister</span>
+    ${blacklistUrl ? `<button class="tl-menu-item tl-blacklist-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
+        <i class="icon-black-list" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i><span>Blacklister</span>
     </button>` : ''}
-    <a href="${pmUrl}" target="_blank" class="tl-menu-item" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:500;text-align:left;color:#e5e7eb;text-decoration:none;">
-        <i class="icon-pm" style="font-size:20px;width:22px;flex-shrink:0;color:#9ca3af;"></i><span>Envoyer un message privé</span>
+    <a href="${pmUrl}" target="_blank" class="tl-menu-item" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);text-decoration:none;">
+        <i class="icon-pm" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i><span>Envoyer un message privé</span>
     </a>
 </div>`;
 
@@ -416,23 +418,150 @@ buildActionButtons() {
 
 
 
-        if (reportUrl) {
-            $wrap.find('.tl-report-btn').off('click').on('click', () => {
-                closeModal();
-                window.open(reportUrl, 'signalement', 'width=600,height=500');
-            });
-        }
+if (reportUrl) {
+    $wrap.find('.tl-report-btn').off('click').on('click', () => {
+        closeModal();
+        this.openReportForm(reportUrl);
+    });
+}
 
         if (blacklistUrl) {
-            $wrap.find('.tl-blacklist-btn').off('click').on('click', () => {
-                closeModal();
-                fetch(blacklistUrl, { credentials: 'include' })
-                    .then(() => { this.$message.css('opacity', '0.4'); })
-                    .catch(err => console.error('[TopicLive+] Erreur blacklist:', err));
+           $wrap.find('.tl-blacklist-btn').off('click').on('click', () => {
+    closeModal();
+    const separator = blacklistUrl.includes('?') ? '&' : '?';
+    const fullUrl = blacklistUrl.includes('action=') ? blacklistUrl : `${blacklistUrl}${separator}action=add`;
+             console.log('[TL DEBUG] fullUrl:', fullUrl);
+ fetch(fullUrl, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'x-requested-with': 'XMLHttpRequest' }
+
+
+
+})
+    .then(r => r.json())
+    .then(data => {
+        if (data && data.success) {
+            const aliasId = blacklistUrl.match(/alias_id=(\d+)/)?.[1];
+            const ajaxHashMatch = blacklistUrl.match(/ajax_hash=([^&]+)/)?.[1];
+            const removeUrl = `https://www.jeuxvideo.com/forums/author/blacklist?alias_id=${aliasId}&ajax_hash=${ajaxHashMatch}&action=delete`;
+
+            const $card = this.$message.find('.messageUser__card');
+            const originalHtml = $card.html();
+
+            $card.html(`
+                <div class="messageUser__header">
+                    <div class="messageUser__profil">
+                        <div class="messageUser__label">Auteur blacklisté</div>
+                        <div class="messageUser__date">${this.date.trim()}</div>
+                    </div>
+                </div>
+                <div class="messageUser__main">
+                    <span class="messageUser__blacklistedText">Ce pseudo figure dans votre blacklist</span>
+                    <button type="button" aria-label="Voir le message de l'utilisateur blacklisté" class="messageUser__link tl-view-blacklisted-btn">Voir le message</button> | <button type="button" aria-label="Retirer cet utilisateur de ma blacklist" class="messageUser__link tl-unblacklist-btn">Retirer de la blacklist</button>
+                </div>
+            `);
+            this.$message.addClass('messageUser--blacklisted');
+
+            this.$message.find('.tl-view-blacklisted-btn').on('click', () => {
+                $card.html(originalHtml);
+                this.$message.removeClass('messageUser--blacklisted');
             });
+
+        this.$message.find('.tl-unblacklist-btn').on('click', () => {
+    fetch(removeUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'x-requested-with': 'XMLHttpRequest' }
+    }).then(() => location.reload());
+});
+        }
+    })
+    .catch(err => console.error('[TopicLive+] Erreur blacklist:', err));
+});
         }
     }
 }
+
+  openReportForm(reportUrl) {
+    fetch(reportUrl, { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data || !data.reasons) return;
+
+           let optionsHtml = '';
+const pseudoMessage = this.pseudo.trim();
+            for (const category in data.reasons) {
+                optionsHtml += `<optgroup label="${category}">`;
+                for (const reason of data.reasons[category]) {
+                    optionsHtml += `<option value="${reason.id}" data-label="${reason.label}">${reason.label}</option>`;
+                }
+                optionsHtml += `</optgroup>`;
+            }
+
+          const $overlay = $('<div class="tl-report-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999999;display:flex;align-items:center;justify-content:center;"></div>');
+
+           const $modal = $('<div class="modalWrapper__main" style="background:rgb(39,42,48);color:rgb(242,242,242);font-size:15px;padding:20px;border-radius:12px;width:440px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);"><div class="modalWrapper__header" style="background:transparent;padding:0 0 20px;margin:0 0 20px;display:flex;justify-content:space-between;align-items:center;"><div class="modalWrapper__title" style="font-size:17px;font-weight:700;text-transform:uppercase;">Faire un signalement</div><button class="tl-report-close" style="background:transparent;border:none;color:rgb(242,242,242);font-size:18px;cursor:pointer;"><span class="icon-close"></span></button></div><div class="modalWrapper__content"><form action="#" class="report"><div class="report__field" style="margin:0 0 15px;"><label class="report__label" style="font-weight:700;display:inline;">Pseudo :</label><span class="report__value" style="color:rgb(61,135,245);font-weight:700;margin-left:10px;">' + pseudoMessage + '</span></div><div class="report__field" style="margin:0 0 15px;"><label for="motif" class="report__label" style="font-weight:700;display:block;">Motif :</label><select name="motif" id="motif" class="report__select tl-report-motif" style="background:rgb(48,50,54);color:rgb(242,242,242);padding:7px 12px;margin:5px 0 0;border-radius:12px;border:1px solid rgb(99,101,105);width:100%;font-size:15px;"><option value="">Sélectionnez un motif</option>' + optionsHtml + '</select></div><div class="report__field" style="margin:0 0 15px;"><label for="reason" class="report__label" style="font-weight:700;display:block;">Remarques :</label><textarea name="reason" id="reason" rows="4" placeholder="Merci de saisir les remarques" class="report__textarea tl-report-remarque" style="background:rgb(48,50,54);color:rgb(242,242,242);padding:7px 12px;margin:5px 0 0;border-radius:12px;border:1px solid rgb(99,101,105);width:100%;font-size:15px;resize:vertical;"></textarea></div><div class="report__field" style="margin:0 0 15px;"><div class="report__description" style="color:rgb(158,158,158);font-size:13px;margin:5px 0 15px;">En cliquant sur le bouton d\'envoi, je déclare penser de bonne foi que les informations et allégations que ma notification contient sont exactes et complètes.</div></div><div class="tl-report-msg" style="margin-bottom:12px;font-size:13px;"></div><div class="report__actions" style="display:flex;justify-content:center;"><button class="report__submit tl-report-submit" type="button" style="background:rgb(61,135,245);color:rgb(0,0,0);padding:8px 20px;border-radius:18px;border:1px solid rgb(61,135,245);font-size:15px;cursor:pointer;">Valider</button></div></form></div></div>');
+
+            $overlay.append($modal);
+            $('body').append($overlay);
+      $modal.css({ 'opacity': '1', 'visibility': 'visible' });
+
+          $overlay.find('.tl-report-close').on('click', () => $overlay.remove());
+
+            $overlay.on('click', (e) => {
+                if (e.target === $overlay[0]) {
+                    $overlay.remove();
+                }
+            });
+
+            $overlay.find('.tl-report-submit').on('click', () => {
+                const $select = $overlay.find('.tl-report-motif');
+                const motifId = $select.val();
+                const motifLabel = $select.find('option:selected').data('label');
+
+                if (!motifId) {
+                    $overlay.find('.tl-report-msg')
+                        .css('color', '#ef4444')
+                        .text('Le motif est obligatoire');
+                    return;
+                }
+
+                const formData = new URLSearchParams();
+                formData.set('motif', motifId);
+                formData.set('reason', motifLabel || '');
+                formData.set('formType', 'signalement');
+
+                for (const key in data.formSession) {
+                    formData.set(key, data.formSession[key]);
+                }
+
+                fetch(reportUrl, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: formData.toString()
+                })
+                .then(r => r.json())
+                .then(() => {
+                    $overlay.find('.tl-report-msg')
+                        .css('color', '#22c55e')
+                        .text(data.locales?.success || 'Signalement envoyé.');
+                    setTimeout(() => $overlay.remove(), 1500);
+                })
+                .catch(() => {
+                    $overlay.find('.tl-report-msg')
+                        .css('color', '#ef4444')
+                        .text("Erreur lors de l'envoi.");
+                });
+            });
+        })
+        .catch(err => console.error('[TopicLive+] Erreur chargement formulaire signalement:', err));
+}
+
     initPartialQuote() {
         const partialQuoteEvent = async (pointerEvent) => {
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -1809,6 +1938,7 @@ extractPayloadGzip().then(payload => {
                 if (this.oldInstance != this.instance) return;
                 blocChargement.removeClass('topiclive-loading').addClass('topiclive-loaded');
                 cb($(responseText.substring(responseText.indexOf('<!DOCTYPE html>'))));
+              this.updateActionsMapFromHtml(responseText);
                 setTimeout(() => { blocChargement.removeClass('topiclive-loaded'); }, 100);
                 TL.loop();
             },
@@ -1820,6 +1950,30 @@ extractPayloadGzip().then(payload => {
             complete: () => { this.isLoading = false; }
         });
     }
+
+async updateActionsMapFromHtml(html) {
+    try {
+        const match = html.match(/forumsAppPayload\s*=\s*["']?([^"']+)["']?/);
+        console.log('[TL DEBUG] match payload trouvé:', !!match);
+        if (!match || !match[1]) return;
+        const binaryString = atob(match[1]);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+        const decompressed = await new Response(stream).text();
+        const payload = JSON.parse(decompressed);
+        console.log('[TL DEBUG] payload decompressé, listMessage length:', payload?.listMessage?.length);
+        if (payload && payload.listMessage) {
+            if (!this.messagesActionsMap) this.messagesActionsMap = {};
+            for (const msg of payload.listMessage) {
+                this.messagesActionsMap[msg.id] = msg.actions;
+            }
+            console.log('[TL DEBUG] map mise à jour, taille totale:', Object.keys(this.messagesActionsMap).length);
+        }
+    } catch (e) {
+        console.log('[TL DEBUG] erreur dans updateActionsMapFromHtml:', e.message);
+    }
+}
 
     loopForum() {
         if (this.isStandby) return;
