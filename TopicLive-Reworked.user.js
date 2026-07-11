@@ -2,14 +2,14 @@
 // @name          TopicLive+ Reworked
 // @namespace     TopicLive+JVC
 // @description   Affiche les nouveaux messages d'un topic en direct.
-// @author        StrangerFruit, sur une base de : moyaona, lantea/atlantis, kiwec
+// @author        StrangerFruit, Meshuggah_93, khhyrt2, sur une base de : moyaona, lantea/atlantis, kiwec
 // @match         https://www.jeuxvideo.com/forums/*
 // @updateURL   https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js
 // @downloadURL https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.7
+// @version       0.8
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @connect       tiktok.com
@@ -22,6 +22,11 @@
 // @noframes
 // ==/UserScript==
 
+
+
+/**
+ * Représente une page de topic et gère l'analyse du DOM pour en extraire les messages.
+ */
 
 async function extractPayloadGzip() {
     const scripts = document.getElementsByTagName('script');
@@ -101,11 +106,18 @@ class Page {
         TL.ajaxTs = this.trouver('#ajax_timestamp_liste_messages').val();
         TL.ajaxHash = this.trouver('#ajax_hash_liste_messages').val();
 
-        const connectesText = this.trouver('.nb-connect-fofo').text().trim();
-        if (connectesText && TL.$tl_connected_counter) {
-            TL.$tl_connected_counter.text(connectesText.split(' ')[0]);
-        }
-        $('.nb-connect-fofo').text(this.trouver('.nb-connect-fofo').text());
+    const connectesText = $('.userCount').filter(function() {
+    return $(this).text().includes('connecté');
+}).find('.userCount__number').text().trim();
+
+if (connectesText && TL.$tl_connected_counter) {
+    TL.$tl_connected_counter.text(connectesText.split(' ')[0]);
+}
+
+const nbConnectes = this.trouver('.nb-connect-fofo').text().trim();
+if (nbConnectes.length) {
+    $('.nb-connect-fofo').text(nbConnectes);
+}
 
         const isTextareaFocused = $(TL.formu.obtenirMessage()).is(':focus');
         let distanceFromBottom;
@@ -122,39 +134,9 @@ class Page {
         let messages_a_afficher = [];
         const nvMsgs = this.obtenirMessages();
         // ── NOUVEAU : détection dernière page avec nouvelle pagination React ──
-        const isOnLastPage = $('.pagination__item--next.pagination__item--disabled').length > 0;
+              const isOnLastPage = TL.estSurDernierePage;
 
-        if (isOnLastPage) {
-            for (const ancienMsg of TL.messages) {
-                const stillExists = nvMsgs.some(nvMsg => nvMsg.id_message === ancienMsg.id_message);
-                if (!stillExists && !ancienMsg.supprime) {
-                    ancienMsg.supprime = true;
-                    ancienMsg.$message.addClass('topiclive-deleted');
-                    const $originalButton = ancienMsg.trouver('.messageUser__action[title="Citer le message"]');
-                    if ($originalButton.length > 0) {
-                        const $cleanButton = $originalButton.clone(false);
-                        $originalButton.replaceWith($cleanButton);
-                        $cleanButton.on('click', (e) => {
-                            e.preventDefault();
-                            const $msgTextarea = TL.formu.obtenirMessage();
-                            const datePropre = ancienMsg.date.trim().replace(/\s+/g, ' ');
-                            const pseudoPropre = ancienMsg.pseudo.trim().replace(/\s+/g, ' ');
-                            const messageContent = ancienMsg.trouver(TL.class_contenu)[0].innerText.trim();
-                            let nvmsg = `> Le ${datePropre} ${pseudoPropre} a écrit :\n>`;
-                            nvmsg += `${messageContent.split('\n').join('\n> ')}\n\n`;
-                            if ($msgTextarea[0].value === '') {
-                                Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msgTextarea[0], `${nvmsg}\n`);
-                            } else {
-                                Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msgTextarea[0], `${$msgTextarea[0].value}\n\n${nvmsg}`);
-                            }
-                            $msgTextarea[0].dispatchEvent(new Event("input", { bubbles: true }));
-                            location.hash = '#forums-post-message-editor';
-                            setTimeout(() => { $msgTextarea[0].focus(); }, 50);
-                        });
-                    }
-                }
-            }
-        }
+
 
         try {
             for (let nvMsg of nvMsgs) {
@@ -166,6 +148,7 @@ class Page {
                         break;
                     }
                 }
+
                 if (nv && isOnLastPage) {
                     TL.messages.push(nvMsg);
                     TL.nvxMessages++;
@@ -178,14 +161,22 @@ class Page {
                     nvMsg.fixImages();
                     $(`${TL.class_pagination}:last`).before(nvMsg.$message);
                     TL.mediaEmbed.processNode(nvMsg.$message);
-                    messages_a_afficher.push({ message: nvMsg, cancelled: false });
-                    dispatchEvent(new CustomEvent('topiclive:newmessage', {
-                        'detail': {
-                            id: nvMsg.id_message,
-                            jvcake: TL.jvCake,
-                            cancel: () => { evt.cancelled = true; }
-                        }
-                    }));
+                const entry = {
+    message: nvMsg,
+    cancelled: false
+};
+
+messages_a_afficher.push(entry);
+
+dispatchEvent(new CustomEvent('topiclive:newmessage', {
+    detail: {
+        id: nvMsg.id_message,
+        jvcake: TL.jvCake,
+        cancel: () => {
+            entry.cancelled = true;
+        }
+    }
+}));
                 }
             }
         } catch (err) {
@@ -247,7 +238,7 @@ class Page {
             const href = TL.jvCake(classes);
             classes = classes.split(' ');
             const index = classes.indexOf('JvCare');
-            classes.splice(index, index + 2);
+            classes.splice(index, 2);
             classes.unshift('xXx');
             classes = classes.join(' ');
             $span.replaceWith(`<a href="${href}" class="${classes}">${$span.html()}</a>`);
@@ -313,7 +304,7 @@ class Message {
         });
     }
 
-  fixCitation(timestamp, hash) {
+ fixCitation(timestamp, hash) {
     if (this.$message.find('.messageUser__action[title="Citer le message"]').length === 0) {
         this.buildActionButtons();
     }
@@ -322,11 +313,18 @@ class Message {
         const $msg = TL.formu.obtenirMessage();
         const datePropre = this.date.trim().replace(/\s+/g, ' ');
         const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
-        const contentNode = this.trouver(TL.class_contenu)[0];
-        const txt = contentNode ? contentNode.innerText.trim() : '';
 
-        let nvmsg = `> Le ${datePropre} ${pseudoPropre} a écrit :\n>`;
-        nvmsg += `${txt.split('\n').join('\n> ')}\n\n`;
+        const texteSource = TL.messagesTextMap ? TL.messagesTextMap[this.id_message] : undefined;
+        let nvmsg;
+        if (texteSource !== undefined) {
+            // On a le vrai texte source (avec ses > d'origine) : on ajoute juste un niveau de citation
+            nvmsg = `> Le ${datePropre} ${pseudoPropre} a écrit :\n> ${texteSource.split('\n').join('\n> ')}\n\n`;
+        } else {
+            // Fallback : ancienne méthode si le texte source n'est pas encore disponible
+            const contentNode = this.trouver(TL.class_contenu)[0];
+            const txt = contentNode ? contentNode.innerText.trim() : '';
+            nvmsg = `> Le ${datePropre} ${pseudoPropre} a écrit :\n>${txt.split('\n').join('\n> ')}\n\n`;
+        }
 
         if ($msg[0].value === '') {
             Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call($msg[0], `${nvmsg}\n`);
@@ -339,20 +337,27 @@ class Message {
     });
 }
 
+
 buildActionButtons() {
     const actions = TL.messagesActionsMap ? TL.messagesActionsMap[this.id_message] : null;
     const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
     const pmUrl = actions?.privateMessage?.url || `https://www.jeuxvideo.com/messages-prives/nouveau.php?all_dest=${encodeURIComponent(pseudoPropre)}`;
     const blacklistUrl = actions?.blacklist?.url || null;
     const reportUrl = actions?.report?.url || null;
+const kickUrl = TL.isModerator ? actions?.kick?.url : null;
+console.log(actions);
+const innerHtml = `
+    <div class="tl-inline-actions" style="display:flex; align-items:center; gap:8px;">
+        <button type="button" class="messageUser__action tl-quote-btn" title="Citer le message">
+            <i class="messageUser__actionIcon icon-quotes"></i>
+            <span class="messageUser__actionLabel">Citer le message</span>
+        </button>
+        ${kickUrl ? `<button type="button" class="messageUser__action tl-kick-btn" title="Kicker l'alias">
 
-    const innerHtml = `
-        <div class="tl-inline-actions" style="display:flex; align-items:center; gap:8px;">
-            <button type="button" class="messageUser__action tl-quote-btn" title="Citer le message">
-                <i class="messageUser__actionIcon icon-quotes"></i>
-                <span class="messageUser__actionLabel">Citer le message</span>
-            </button>
-        </div>
+            <i class="messageUser__actionIcon icon-kick"></i>
+            <span class="messageUser__actionLabel">Kicker l'alias</span>
+        </button>` : ''}
+    </div>
         <div class="tl-more-wrap" style="position:relative; display:inline-block;">
        <button class="tl-more-btn" type="button" aria-label="Plus d'actions" style="background:transparent;border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;">
     <i class="messageUser__actionIcon icon-more"></i>
@@ -416,6 +421,13 @@ buildActionButtons() {
             if (!$(e.target).closest($wrap).length) closeModal();
         });
 
+if (kickUrl) {
+    $headerActions.find('.tl-kick-btn').off('click').on('click', () => {
+      const ajaxHash = (blacklistUrl || reportUrl || '').match(/ajax_hash=([^&]+)/)?.[1] || TL.ajaxHash;
+const url = `https://www.jeuxvideo.com/forums/author/kick?message_id=${this.id_message}&forum_id=${TL.currentForumId}&ajax_hash=${ajaxHash}`;
+        this.openKickForm(url);
+    });
+}
 
 
 if (reportUrl) {
@@ -430,7 +442,7 @@ if (reportUrl) {
     closeModal();
     const separator = blacklistUrl.includes('?') ? '&' : '?';
     const fullUrl = blacklistUrl.includes('action=') ? blacklistUrl : `${blacklistUrl}${separator}action=add`;
-             console.log('[TL DEBUG] fullUrl:', fullUrl);
+
  fetch(fullUrl, {
     method: 'POST',
     credentials: 'include',
@@ -562,7 +574,70 @@ const pseudoMessage = this.pseudo.trim();
         .catch(err => console.error('[TopicLive+] Erreur chargement formulaire signalement:', err));
 }
 
-    initPartialQuote() {
+openKickForm(kickUrl) {
+        fetch(kickUrl, { credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data || !data.reasons) return;
+                let optionsHtml = '';
+                const pseudoKick = data.pseudo || this.pseudo.trim();
+                for (const category in data.reasons) {
+                    optionsHtml += '<optgroup label="' + category + '">';
+                 for (const reason of data.reasons[category]) {
+    const desc = reason.description ? ' — ' + reason.description : '';
+    optionsHtml += '<option value="' + reason.id + '" data-label="' + reason.label + '" title="' + (reason.description || '') + '">' + reason.label + '</option>';
+}
+                    optionsHtml += '</optgroup>';
+                }
+                const $overlay = $('<div class="tl-report-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999999;display:flex;align-items:center;justify-content:center;"></div>');
+                const $modal = $('<div class="modalWrapper__main" style="background:rgb(39,42,48);color:rgb(242,242,242);font-size:15px;padding:20px;border-radius:12px;width:440px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.5);"><div class="modalWrapper__header" style="background:transparent;padding:0 0 20px;margin:0 0 20px;display:flex;justify-content:space-between;align-items:center;"><div class="modalWrapper__title" style="font-size:17px;font-weight:700;text-transform:uppercase;">Kick d\'un utilisateur</div><button class="tl-kick-close" style="background:transparent;border:none;color:rgb(242,242,242);font-size:18px;cursor:pointer;"><span class="icon-close"></span></button></div><div class="modalWrapper__content"><form class="report"><div class="report__field" style="margin:0 0 15px;"><label class="report__label" style="font-weight:700;display:inline;">Pseudo :</label><span class="report__value" style="color:rgb(61,135,245);font-weight:700;margin-left:10px;">' + pseudoKick + '</span></div><div class="report__field" style="margin:0 0 15px;"><label class="report__label" style="font-weight:700;display:block;">Motif :</label><select class="report__select tl-kick-motif" style="background:rgb(48,50,54);color:rgb(242,242,242);padding:7px 12px;margin:5px 0 0;border-radius:12px;border:1px solid rgb(99,101,105);width:100%;font-size:15px;"><option value="">Sélectionnez un motif</option>' + optionsHtml + '</select><div class="tl-kick-desc" style="color:rgb(158,158,158);font-size:13px;margin:8px 0 15px;line-height:1.4;min-height:40px;font-style:italic;"></div></div><div class="report__field" style="margin:0 0 15px;"><label class="report__label" style="font-weight:700;display:block;">Raison du kick (obligatoire) :</label><textarea rows="4" placeholder="Merci de saisir la raison du kick" class="report__textarea tl-kick-raison" style="background:rgb(48,50,54);color:rgb(242,242,242);padding:7px 12px;margin:5px 0 0;border-radius:12px;border:1px solid rgb(99,101,105);width:100%;font-size:15px;resize:vertical;"></textarea></div><div class="tl-kick-msg" style="margin-bottom:12px;font-size:13px;"></div><div style="display:flex;justify-content:center;"><button class="report__submit tl-kick-submit" type="button" style="background:rgb(61,135,245);color:rgb(0,0,0);padding:8px 20px;border-radius:18px;border:1px solid rgb(61,135,245);font-size:15px;cursor:pointer;">Valider</button></div></form></div></div>');
+                $overlay.append($modal);
+                $('body').append($overlay);
+                $modal.css({ 'opacity': '1', 'visibility': 'visible' });
+          $overlay.find('.tl-kick-motif').on('change', function() {
+    const desc = $overlay.find('.tl-kick-motif option:selected').attr('title') || '';
+    $overlay.find('.tl-kick-desc').text(desc);
+});
+                $overlay.find('.tl-kick-close').on('click', () => $overlay.remove());
+                $overlay.on('click', (e) => { if (e.target === $overlay[0]) $overlay.remove(); });
+                $overlay.find('.tl-kick-submit').on('click', () => {
+                    const motifId = $overlay.find('.tl-kick-motif').val();
+                    const raison = $overlay.find('.tl-kick-raison').val().trim();
+                    if (!motifId) { $overlay.find('.tl-kick-msg').css('color', '#ef4444').text('Le motif est obligatoire.'); return; }
+                    if (!raison) { $overlay.find('.tl-kick-msg').css('color', '#ef4444').text('La raison est obligatoire.'); return; }
+                    const formData = new URLSearchParams();
+                    formData.set('message_id', this.id_message);
+                    formData.set('forum_id', TL.currentForumId);
+                    formData.set('ajax_hash', TL.ajaxHash);
+                    formData.set('action', 'submit');
+                    formData.set('motif_kick', motifId);
+                    formData.set('raison_kick', raison);
+                    formData.set('duree_kick', '3');
+                    fetch(kickUrl + '&action=submit', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-requested-with': 'XMLHttpRequest' },
+                        body: formData.toString()
+                    })
+                        .then(r => r.json())
+                        .then(res => { console.log('[TL DEBUG] réponse kick:', JSON.stringify(res));
+                           if (res.success) {
+    $overlay.remove();
+    const $toast = $('<div style="position:fixed;top:60px;left:50%;transform:translateX(-50%);width:800px;max-width:100%;font-size:0.875rem;color:rgb(242,242,242);pointer-events:auto;background-color:rgb(25,135,84);background-clip:padding-box;border:1px solid rgba(255,255,255,0.1);box-shadow:0 16px 48px rgba(0,0,0,0.4);border-radius:12px;z-index:2147483647;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px;"><span>L\'utilisateur a été kické.</span><button style="background:transparent;border:none;color:rgb(242,242,242);font-size:18px;cursor:pointer;line-height:1;padding:0;">×</button></div>');
+    $('body').append($toast);
+    $toast.find('button').on('click', () => $toast.remove());
+    setTimeout(() => $toast.remove(), 4000);
+} else {
+                                $overlay.find('.tl-kick-msg').css('color', '#ef4444').text((res.errors || ['Erreur lors du kick.']).join(' '));
+                            }
+                        })
+                        .catch(() => { $overlay.find('.tl-kick-msg').css('color', '#ef4444').text('Erreur réseau.'); });
+                });
+            })
+            .catch(err => console.error('[TopicLive+] Erreur chargement formulaire kick:', err));
+    }
+
+  initPartialQuote() {
         const partialQuoteEvent = async (pointerEvent) => {
             await new Promise(resolve => setTimeout(resolve, 50));
             const selection = window.getSelection();
@@ -597,15 +672,20 @@ const pseudoMessage = this.pseudo.trim();
         TL.$partialQuoteButton.removeClass('active');
     }
 
-    fixDeroulerCitation() {
-        this.trouver('.text-enrichi-forum > blockquote.blockquote-jv > blockquote').each(function() {
+	fixDeroulerCitation() {
+        this.trouver('.message__blockquote').each(function() {
             const $quote = $(this);
-            const $buttonOpenQuote = $('<div class="nested-quote-toggle-box"></div>');
-            $quote.prepend($buttonOpenQuote);
-            $buttonOpenQuote.on('click', function() {
-                const $blockquote = $buttonOpenQuote.closest('.blockquote-jv');
-                const visible = $blockquote.attr('data-visible');
-                $blockquote.attr('data-visible', visible === '1' ? '' : '1');
+            // On compte le nombre de blockquotes parents : on veut exactement 1 (= niveau 2)
+            const nbParentsBlockquote = $quote.parents('.message__blockquote').length;
+            if (nbParentsBlockquote !== 1) return;
+            // Évite les doublons si déjà traité
+            if ($quote.find('> .message__collapsedQuote').length > 0) return;
+            const $btn = $('<button type="button" class="message__collapsedQuote"></button>');
+            $quote.prepend($btn);
+            $btn.on('click', function() {
+                const isDown = $(document).scrollTop() + $(window).height() >= $(document).height() - 10;
+                $quote.toggleClass('message__blockquote--visible');
+                if (isDown) $('html, body').scrollTop($(document).height());
             });
         });
     }
@@ -745,7 +825,7 @@ observerLeBouton(selecteurBouton) {
         const self = this;
         const handleSuccess = (response) => {
             // ── NOUVEAU : détection dernière page avec nouvelle pagination ──
-            const isOnLastPage = $('.pagination__item--next.pagination__item--disabled').length > 0;
+                        const isOnLastPage = TL.estSurDernierePage;
             self._setTextAreaValue($msgTextarea[0], '');
             if (isOnLastPage) {
                 if (response.redirectUrl) {
@@ -1119,7 +1199,8 @@ class TopicLive {
         this.$tl_connected_counter = null;
         this.isStandby = false;
         this.changelogContent = null;
-        this.mediaEmbed = null;
+          this.mediaEmbed = null;
+        this.estSurDernierePage = false;
     }
 
     loadSettings() {
@@ -1196,11 +1277,23 @@ class TopicLive {
         this.estMP = false;
         this.url = document.URL;
 
-      this.messagesActionsMap = {};
+this.messagesActionsMap = {};
+this.messagesTextMap = {};
+this.isModerator = false;
+this.currentForumId = this._getCurrentForumId();
 extractPayloadGzip().then(payload => {
     if (payload && payload.listMessage) {
         for (const msg of payload.listMessage) {
             this.messagesActionsMap[msg.id] = msg.actions;
+            this.messagesTextMap[msg.id] = msg.text;
+        }
+    }
+    this.currentUserPseudo = $('.headerAccount__pseudo').text().trim();
+    if (payload && payload.forumInfo && payload.forumInfo.data) {
+        const modBlock = payload.forumInfo.data.find(d => d.type === 'moderator');
+        if (modBlock && modBlock.body && modBlock.body[0] && modBlock.body[0].label) {
+            const modList = modBlock.body[0].label.map(l => l.value);
+            this.isModerator = modList.includes(this.currentUserPseudo);
         }
     }
 });
@@ -1244,9 +1337,53 @@ extractPayloadGzip().then(payload => {
                 }
             }
 
+                     this.demarrerSiDernierePage();
+        }
+    }
+
+      demarrerSiDernierePage() {
+        const POSTS_PAR_PAGE = 20;
+        const postsDOM = $(this.class_msg).length;
+
+        if (postsDOM < POSTS_PAR_PAGE) {
+            this.estSurDernierePage = true;
             this.page.scan();
             this.loop();
+            return;
         }
+
+        const testUrl = this.url.split('-');
+        const pageActuelle = parseInt(testUrl[3], 10) || 1;
+        testUrl[3] = pageActuelle + 1;
+        const urlPageSuivante = testUrl.join('-');
+
+        $.ajax({
+            type: 'GET',
+            url: urlPageSuivante,
+            timeout: 5000,
+            success: (data, textStatus, jqXHR) => {
+                const pageSuivante = $(jqXHR.responseText.substring(jqXHR.responseText.indexOf('<!DOCTYPE html')));
+                const postsSuivants = pageSuivante.find(this.class_msg).length;
+
+                const canonicalMatch = jqXHR.responseText.match(/rel="canonical" href="[^"]*-(\d+)-0-1-0-[^"]*"/);
+                const pageRetournee = canonicalMatch ? parseInt(canonicalMatch[1], 10) : null;
+                const pageVoulue = pageActuelle + 1;
+                const estRedirection = pageRetournee !== null && pageRetournee !== pageVoulue;
+
+                if (postsSuivants > 0 && !estRedirection) {
+
+                } else {
+                    this.estSurDernierePage = true;
+                    this.page.scan();
+                    this.loop();
+                }
+            },
+            error: () => {
+                this.estSurDernierePage = true;
+                this.page.scan();
+                this.loop();
+            }
+        });
     }
 
     initOtherScriptObserver() {
@@ -1293,7 +1430,17 @@ extractPayloadGzip().then(payload => {
             #topiclive-button .topiclive-arrow { transition: transform 0.3s ease; display: flex; align-items: center; }
             .button-transitioning { transform: scale(0.9); transition: transform 0.15s ease, background-color 0.15s ease; }
             #topiclive-connected-counter { pointer-events: none; }
-            .tl-counter-button { width: 20px; height: 20px; line-height: 20px; font-size: 11px; font-weight: bold; }
+          .tl-counter-button {
+    width: 35px;
+    height: 35px;
+    line-height: 35px;
+    font-size: 15px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
         `;
         $('head').append(`<style>${buttonCss}</style>`);
         this.$tl_button = $(`<button id="topiclive-button" class="topiclive-floating-button"><span class="topiclive-counter"></span><span class="topiclive-arrow">${arrowIconSvg}</span></button>`).hide();
@@ -1302,7 +1449,7 @@ extractPayloadGzip().then(payload => {
 
         this.$tl_button.on('click', () => {
             // ── NOUVEAU : détection dernière page ──
-            const isOnLastPage = $('.pagination__item--next.pagination__item--disabled').length > 0;
+                        const isOnLastPage = TL.estSurDernierePage;
             if (isOnLastPage) {
                 if (this.nvxMessages > 0) {
                     this.page.performScroll();
@@ -1703,11 +1850,23 @@ extractPayloadGzip().then(payload => {
         }
     }
 
-    initConnectedCounter() {
-        this.$tl_connected_counter = $(`<div id="topiclive-connected-counter" class="topiclive-floating-button tl-counter-button"></div>`).hide();
-        $('body').append(this.$tl_connected_counter);
-    }
+initConnectedCounter() {if (this.$tl_connected_counter) this.$tl_connected_counter.remove();
+if (this.$tl_connected_counter_clone) this.$tl_connected_counter_clone.remove();
+    this.$tl_connected_counter = $('<div id="topiclive-connected-counter" class="topiclive-floating-button tl-counter-button"></div>');
+    this.$tl_connected_counter_clone = $('<div class="topiclive-floating-button"></div>');
 
+    $('body').append(this.$tl_connected_counter);
+    $('body').append(this.$tl_connected_counter_clone);
+
+    setTimeout(() => {
+        const nb = $('.userCount__number').first().text().trim();
+
+        if (nb) {
+            // On initialise uniquement le clone.
+            this.$tl_connected_counter_clone.text(nb).show();
+        }
+    }, 200);
+}
     initPartialQuoteSystem() {
         const buttonCSS = `
             #tl-partial-quote-button { background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAEVJREFUeNpiYBgFFANGbIL/gQCuAAhwiYEAE6UuoI0BSE78gE8MpwFA7yZAmRvwiTHg0NwAxOeBuACIFXCJjQIqAoAAAwDEvS2y79EjywAAAABJRU5ErkJggg==) no-repeat; background-color: rgb(3, 94, 191); background-position: -1px -1px; border: 0; border-bottom: solid 2px rgb(2, 63, 128); border-radius: 2px; box-sizing: content-box; cursor: pointer; height: 16px; width: 16px; padding: 0; position: absolute; display: none; z-index: 1001; transform: translateX(-50%); }
@@ -1739,6 +1898,13 @@ extractPayloadGzip().then(payload => {
                 const basePositionRight = $container.offset().left + $container.outerWidth() + 15;
                 const decalageGauche = 11;
                 this.$tl_connected_counter.css({ position: 'fixed', top: `${counterTop}px`, left: `${basePositionRight - decalageGauche}px`, right: 'auto', bottom: 'auto' });
+              this.$tl_connected_counter_clone.css({
+    position: 'fixed',
+    bottom: `${replyButtonBottom + 43}px`,
+    left: `${basePositionRight}px`,
+    right: 'auto',
+    top: 'auto'
+});
                 this.$tl_button.css({ position: 'fixed', bottom: `${scrollButtonBottom}px`, left: `${basePositionRight}px`, right: 'auto', top: 'auto' });
                 this.$tl_forum_button.css({ position: 'fixed', bottom: `${listButtonBottom}px`, left: `${basePositionRight}px`, right: 'auto', top: 'auto' });
                 this.$tl_quick_reply_button.css({ position: 'fixed', bottom: `${replyButtonBottom}px`, left: `${basePositionRight}px`, right: 'auto', top: 'auto' });
@@ -1804,7 +1970,7 @@ extractPayloadGzip().then(payload => {
         this.init();
         addEventListener('instantclick:newpage', this.init.bind(this));
         $("head").append(`<style type='text/css'>.topiclive-loading:after { content: ' ○' }.topiclive-loaded:after { content: ' ●' }</style>`);
-        console.log('[TopicLive+] : activé (v8.3 - compatible nouvelle interface JVC)');
+
     }
 
     jvCake(classe) {
@@ -1815,6 +1981,11 @@ extractPayloadGzip().then(payload => {
             lien += String.fromCharCode(base16.indexOf(s.charAt(i)) * 16 + base16.indexOf(s.charAt(i + 1)));
         }
         return lien;
+    }
+
+  _getCurrentForumId() {
+        const match = window.location.pathname.match(/forums\/(?:1|42)-(?<forumid>[0-9]+)-/);
+        return match ? match.groups.forumid : null;
     }
 
     alert(message) {
@@ -1829,24 +2000,39 @@ extractPayloadGzip().then(payload => {
         this.idanalyse = setTimeout(this.charger.bind(this), duree);
     }
 
-    majUrl(page) {
-        if (this.estMP) return;
-        // ── NOUVEAU : sélecteur pagination fin ──
-        const $bouton = page.trouver('.pagination__item--last:not(.pagination__item--disabled)');
-        const numPage = page.trouver(`${this.class_num_page}:first`).text();
-        const testUrl = this.url.split('-');
-        if ($bouton.length > 0) {
-            let nouvelleUrl = $bouton.attr('href') || '';
-            if (nouvelleUrl && nouvelleUrl !== this.url) {
-                this.messages = [];
-                this.url = nouvelleUrl;
-            }
-        } else if (testUrl[3] != numPage) {
-            this.messages = [];
-            testUrl[3] = numPage;
-            this.url = testUrl.join('-');
-        }
+  majUrl(page) {
+    if (this.estMP) return;
+
+    // La pagination JVC étant injectée côté client, on détecte le débordement
+    // par comptage : si le fetch renvoie 20 posts et qu'on en connaît déjà 20,
+    // on passe à la page suivante sans vider les messages.
+    const POSTS_PAR_PAGE = 20;
+
+    const nvMsgsCount = page.trouver(`${TL.class_msg}:not(.msg-pseudo-blacklist)`).length;
+
+    const testUrl = this.url.split('-');
+    const pageActuelle = parseInt(testUrl[3], 10) || 1;
+
+    if (nvMsgsCount >= POSTS_PAR_PAGE && this.messages.length >= POSTS_PAR_PAGE) {
+        const pageNext = pageActuelle + 1;
+        testUrl[3] = pageNext;
+        this.url = testUrl.join('-');
+        return;
     }
+
+    const $bouton = page.trouver('.pagination__item--last:not(.pagination__item--disabled)');
+    const numPage = page.trouver(`${this.class_num_page}:first`).text();
+
+    if ($bouton.length > 0) {
+        const nouvelleUrl = $bouton.attr('href') || '';
+        if (nouvelleUrl && nouvelleUrl !== this.url) {
+            this.url = nouvelleUrl;
+        }
+    } else if (testUrl[3] != numPage) {
+        testUrl[3] = numPage;
+        this.url = testUrl.join('-');
+    }
+}
 
     suivreOnglets() {
         document.addEventListener('visibilitychange', () => { this.ongletActif = !document.hidden; });
@@ -1954,7 +2140,6 @@ extractPayloadGzip().then(payload => {
 async updateActionsMapFromHtml(html) {
     try {
         const match = html.match(/forumsAppPayload\s*=\s*["']?([^"']+)["']?/);
-        console.log('[TL DEBUG] match payload trouvé:', !!match);
         if (!match || !match[1]) return;
         const binaryString = atob(match[1]);
         const bytes = new Uint8Array(binaryString.length);
@@ -1962,16 +2147,32 @@ async updateActionsMapFromHtml(html) {
         const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
         const decompressed = await new Response(stream).text();
         const payload = JSON.parse(decompressed);
-        console.log('[TL DEBUG] payload decompressé, listMessage length:', payload?.listMessage?.length);
+    TL.isModerator = !!payload.topicActions?.showCheckbox;
         if (payload && payload.listMessage) {
-            if (!this.messagesActionsMap) this.messagesActionsMap = {};
-            for (const msg of payload.listMessage) {
-                this.messagesActionsMap[msg.id] = msg.actions;
-            }
-            console.log('[TL DEBUG] map mise à jour, taille totale:', Object.keys(this.messagesActionsMap).length);
+           if (!this.messagesActionsMap) this.messagesActionsMap = {};
+if (!this.messagesTextMap) this.messagesTextMap = {};
+
+for (const msg of payload.listMessage) {
+    this.messagesActionsMap[msg.id] = msg.actions;
+    this.messagesTextMap[msg.id] = msg.text;
+}
+   if (payload?.forumInfo?.header?.btnVal !== undefined) {
+    const nb = payload.forumInfo.header.btnVal;
+
+    if (this.$tl_connected_counter) {
+        this.$tl_connected_counter.hide();
+    }
+
+    if (this.$tl_connected_counter_clone) {
+        this.$tl_connected_counter_clone.text(nb).show();
+    }
+
+    $('.userCount__number').text(nb);
+}
         }
-    } catch (e) {
-        console.log('[TL DEBUG] erreur dans updateActionsMapFromHtml:', e.message);
+  } catch (e) {
+    console.error('[TopicLive+] updateActionsMapFromHtml:', e);
+
     }
 }
 
@@ -1983,17 +2184,47 @@ async updateActionsMapFromHtml(html) {
         this.idForumAnalyse = setTimeout(this.chargerForum.bind(this), duree);
     }
 
+  pollConnectedCounter() {
+    const instanceAuLancement = this.instance;
+
+    const executer = () => {
+        if (instanceAuLancement !== this.instance) return;
+
+        if (this.isStandby) {
+            this.idCounterPoll = setTimeout(executer, 15000);
+            return;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: this.url,
+            timeout: 5000,
+            success: (data, textStatus, jqXHR) => {
+                if (instanceAuLancement !== this.instance) return;
+                this.updateActionsMapFromHtml(jqXHR.responseText);
+            },
+            complete: () => {
+                if (instanceAuLancement !== this.instance) return;
+                this.idCounterPoll = setTimeout(executer, 15000);
+            }
+        });
+    };
+
+    executer();
+}
+
     chargerForum() {
         if (this.isLoading) return;
         if (this.oldInstance != this.instance) return;
         this.isLoading = true;
         $.ajax({
             type: 'GET', url: this.url, timeout: 5000,
-            success: (data) => {
-                if (this.oldInstance != this.instance) return;
-                this.scanForumPageAndUpdate($(data));
-                this.loopForum();
-            },
+           success: (data, textStatus, jqXHR) => {
+    if (this.oldInstance != this.instance) return;
+
+    this.updateActionsMapFromHtml(jqXHR.responseText);
+    this.loopForum();
+},
             error: () => { if (this.oldInstance == this.instance) this.loopForum(); },
             complete: () => { this.isLoading = false; }
         });
@@ -2003,6 +2234,9 @@ async updateActionsMapFromHtml(html) {
         const connectesText = $page.find('.nb-connect-fofo').text().trim();
         if (connectesText && this.$tl_connected_counter) {
             this.$tl_connected_counter.text(connectesText.split(' ')[0]);
+          this.$tl_connected_counter_clone
+    .text(connectesText.split(' ')[0])
+    .show();
         }
     }
 }
