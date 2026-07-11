@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.8
+// @version       0.8.1
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @connect       tiktok.com
@@ -1443,6 +1443,13 @@ extractPayloadGzip().then(payload => {
 }
         `;
         $('head').append(`<style>${buttonCss}</style>`);
+      $('head').append(`
+<style>
+#topiclive-connected-counter {
+    display: none !important;
+}
+</style>
+`);
         this.$tl_button = $(`<button id="topiclive-button" class="topiclive-floating-button"><span class="topiclive-counter"></span><span class="topiclive-arrow">${arrowIconSvg}</span></button>`).hide();
         this.$tl_button.get(0).TL = this;
         $('body').append(this.$tl_button);
