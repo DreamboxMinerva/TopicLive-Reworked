@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.87
+// @version       0.88
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @connect       tiktok.com
@@ -1476,6 +1476,11 @@ extractPayloadGzip().then(payload => {
 .container__messages {
     margin-bottom: 0 !important;
 }
+
+.pagination__navigation--bottom {
+    margin-top: 0.625rem !important;
+}
+
         `;
         $('head').append(`<style>${buttonCss}</style>`);
 
