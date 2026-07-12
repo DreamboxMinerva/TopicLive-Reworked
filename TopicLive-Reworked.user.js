@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.81
+// @version       0.8.1
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @connect       tiktok.com
@@ -1857,7 +1857,9 @@ extractPayloadGzip().then(payload => {
         }
     }
 
-initConnectedCounter() {if (this.$tl_connected_counter) this.$tl_connected_counter.remove();
+initConnectedCounter()
+
+  {if (this.$tl_connected_counter) this.$tl_connected_counter.remove();
 if (this.$tl_connected_counter_clone) this.$tl_connected_counter_clone.remove();
     this.$tl_connected_counter = $('<div id="topiclive-connected-counter" class="topiclive-floating-button tl-counter-button"></div>');
     this.$tl_connected_counter_clone = $('<div class="topiclive-floating-button"></div>');
@@ -1970,7 +1972,9 @@ if (this.$tl_connected_counter_clone) this.$tl_connected_counter_clone.remove();
         this.initScrollButton();
         this.initForumListButton();
         this.initQuickReplyButton();
-        this.initConnectedCounter();
+if (!location.pathname.startsWith('/forums/0-')) {
+    this.initConnectedCounter();
+}
         this.initPartialQuoteSystem();
         this.initSettingsMenu();
         this.initOtherScriptObserver();
