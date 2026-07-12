@@ -9,16 +9,9 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.88
+// @version       0.90
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
-// @connect       tiktok.com
-// @connect       vxinstagram.com
-// @connect       publish.twitter.com
-// @connect       platform.twitter.com
-// @connect       api.streamable.com
-// @connect       webmshare.com
-// @connect       api.fxtwitter.com
 // @noframes
 // ==/UserScript==
 
@@ -1056,148 +1049,8 @@ class MediaEmbed {
         });
     }
 
-    handleWebmshare($linkElement, url) {
-        const match = url.match(/https:\/\/webmshare\.com\/(?:play\/)?(?<id>[\w]+)/i);
-        if (!match) return;
-        const videoUrl = `https://s1.webmshare.com/${match.groups.id}.webm`;
-        const $video = $('<video>', { controls: true, style: "width:100%; height:auto; max-width:730px; display:block;" });
-        const $source = $('<source>', { src: videoUrl, type: 'video/webm' });
-        $video.append($source);
-        $linkElement.closest('p').after($video);
-    }
 
-    handleVocaroo($linkElement, url) {
-        const match = url.match(/^https:\/\/voca(?:roo\.com|\.ro)\/(?<id>.*)$/i);
-        if (!match) return;
-        const $iframe = $('<iframe>', { width: 300, height: 60, frameborder: 0, allow: 'autoplay', src: `https://vocaroo.com/embed/${match.groups.id}?autoplay=0` });
-        $linkElement.closest('p').after($iframe);
-    }
-
-    embedCleanTikTokVideo($linkElement, fullUrl) {
-        const match = fullUrl.match(/\/video\/(\d+)/);
-        if (match && match[1]) {
-            const videoId = match[1];
-            const embedUrl = `https://www.tiktok.com/embed/v2/${videoId}`;
-            const $container = $('<div>', { 'class': 'jvc-embed-container tiktok-iframe-embed' });
-            const $iframe = $('<iframe>', { src: embedUrl, scrolling: 'no', allow: 'encrypted-media; autoplay; clipboard-write;', allowfullscreen: 'true' });
-            $container.append($iframe);
-            $linkElement.after($container);
-        }
-    }
-
-    handleTikTok($linkElement, url) {
-        if (url.includes('vm.tiktok.com/') || url.includes('vt.tiktok.com/')) {
-            GM_xmlhttpRequest({
-                method: "HEAD", url: url,
-                onload: (r) => { if (r.finalUrl && r.finalUrl.includes('/video/')) this.embedCleanTikTokVideo($linkElement, r.finalUrl); }
-            });
-        } else {
-            this.embedCleanTikTokVideo($linkElement, url);
-        }
-    }
-
-    handleInstagram($linkElement, url) {
-        const vxUrl = new URL(url);
-        vxUrl.hostname = 'vxinstagram.com';
-        GM_xmlhttpRequest({
-            method: "GET", url: vxUrl.href,
-            onload: (r) => {
-                if (r.status >= 200 && r.status < 300) {
-                    const doc = new DOMParser().parseFromString(r.responseText, "text/html");
-                    const videoMeta = doc.querySelector('meta[property="og:video"]');
-                    if (videoMeta && videoMeta.content) {
-                        const $c = $('<div>', { 'class': 'jvc-embed-container instagram-native-embed' });
-                        const $v = $('<video>', { src: videoMeta.content, controls: true, loop: true });
-                        $c.append($v);
-                        $linkElement.after($c);
-                    } else {
-                        const m = url.match(/instagram\.com\/(p|reel|reels)\/([a-zA-Z0-9_-]+)/);
-                        if (m && m[2]) {
-                            const embedUrl = `https://www.instagram.com/p/${m[2]}/embed/?cr=1&v=14&wp=540&rd=https%3A%2F%2Fwww.jeuxvideo.com&rp=%2F#%7B%22ci%22%3A0%2C%22os%22%3A1%7D`;
-                            const $c = $('<div>', { 'class': 'jvc-embed-container instagram-iframe-embed' });
-                            const $i = $('<iframe>', { src: embedUrl, scrolling: 'no' }).css('height', '620px');
-                            $c.append($i);
-                            $linkElement.after($c);
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    handleYouTube($linkElement, url) {
-        const youtubeRegex = /(?:youtube\.com\/(?:watch\?v=|embed\/|live\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11}).*?(?:[?&](?:t|start)=([\w\dms]+))/;
-        const match = url.match(youtubeRegex) || url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|live\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (match && match[1]) {
-            const videoId = match[1];
-            const timestamp = match[2];
-            let embedUrl = `https://www.youtube.com/embed/${videoId}`;
-            const parseYoutubeTimestamp = (ts) => {
-                if (!ts) return 0;
-                if (/^\d+$/.test(ts)) return parseInt(ts, 10);
-                let totalSeconds = 0;
-                const hoursMatch = ts.match(/(\d+)h/);
-                const minutesMatch = ts.match(/(\d+)m/);
-                const secondsMatch = ts.match(/(\d+)s/);
-                if (hoursMatch) totalSeconds += parseInt(hoursMatch[1], 10) * 3600;
-                if (minutesMatch) totalSeconds += parseInt(minutesMatch[1], 10) * 60;
-                if (secondsMatch) totalSeconds += parseInt(secondsMatch[1], 10);
-                if (totalSeconds === 0 && /[a-zA-Z]/.test(ts)) return 0;
-                return totalSeconds;
-            };
-            const startSeconds = parseYoutubeTimestamp(timestamp);
-            if (startSeconds > 0) embedUrl += `?start=${startSeconds}`;
-            const $c = $('<div>', { 'class': 'jvc-embed-container ratio-16-9' });
-            const $i = $('<iframe>', { src: embedUrl, allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share', allowfullscreen: 'true' });
-            $c.append($i);
-            $linkElement.after($c);
-        }
-    }
-
-    loadTwitterWidgetScript() {
-        if (this.twitterWidgetScriptLoaded) return;
-        this.twitterWidgetScriptLoaded = true;
-        const s = document.createElement('script');
-        s.src = 'https://platform.twitter.com/widgets.js';
-        s.async = true;
-        s.charset = 'utf-8';
-        document.head.appendChild(s);
-    }
-
-    handleTwitter($linkElement, url) {
-        if ($linkElement.closest('.twitter-tweet').length) return;
-        const cleanUrl = url.replace(/x\.com/, 'twitter.com');
-        const $tweetElement = $('<blockquote>', { 'class': 'twitter-tweet', 'data-theme': 'dark' });
-        const $linkInQuote = $('<a>', { href: cleanUrl });
-        $tweetElement.append($linkInQuote);
-        $linkElement.after($tweetElement);
-        if (window.twttr && window.twttr.widgets) {
-            window.twttr.widgets.load($tweetElement[0]);
-        } else {
-            this.loadTwitterWidgetScript();
-        }
-    }
-
-    handleStreamable($linkElement, url) {
-        GM_xmlhttpRequest({
-            method: "GET",
-            url: `https://api.streamable.com/oembed.json?url=${encodeURIComponent(url)}`,
-            responseType: "json",
-            onload: (r) => {
-                if (r.status === 200 && r.response && r.response.html) {
-                    const $c = $('<div>', { 'class': 'jvc-embed-container ratio-16-9' });
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = r.response.html;
-                    const iframe = tempDiv.querySelector('iframe');
-                    if (iframe) {
-                        iframe.setAttribute('referrerpolicy', 'no-referrer');
-                        $c.append(iframe);
-                        $linkElement.after($c);
-                    }
-                }
-            }
-        });
-    }
+  
 }
 
 /**
@@ -1244,15 +1097,9 @@ class TopicLive {
         this.options.listButtonSwipe = load('topiclive_listButtonSwipe', true);
         this.options.quickReplyButton = load('topiclive_quickReplyButton', true);
         this.options.counterOnTopics = load('topiclive_counterOnTopics', true);
-        this.options.counterOnForums = load('topiclive_counterOnForums', true);
+
         this.options.mobileMode = load('topiclive_mobileMode', false);
-        this.options.embedTiktok = load('topiclive_embedTiktok', true);
-        this.options.embedInstagram = load('topiclive_embedInstagram', true);
-        this.options.embedYoutube = load('topiclive_embedYoutube', true);
-        this.options.embedTwitter = load('topiclive_embedTwitter', true);
-        this.options.embedWebmshare = load('topiclive_embedWebmshare', true);
-        this.options.embedStreamable = load('topiclive_embedStreamable', true);
-        this.options.embedVocaroo = load('topiclive_embedVocaroo', true);
+
     }
 
     charger() {
@@ -1285,16 +1132,18 @@ class TopicLive {
         this.unreadMessageAnchors = [];
         this.lastScrollTop = 0;
 
-        if (document.URL.match(/\/forums\/0-/)) {
-            this.isForumPage = true;
-            this.instance++;
-            this.url = document.URL;
-            if (this.options.mobileMode && this.options.counterOnForums) this.$tl_connected_counter.show();
-            this.updateDesktopButtonPosition();
-            this.scanForumPageAndUpdate($(document));
-            this.loopForum();
-            return;
-        }
+     if (document.URL.match(/\/forums\/0-/)) {
+    this.isForumPage = true;
+    this.instance++;
+    this.url = document.URL;
+
+    $('#topiclive-connected-counter, .tl-counter-button').hide();
+
+    this.updateDesktopButtonPosition();
+    this.scanForumPageAndUpdate($(document));
+    this.loopForum();
+    return;
+}
 
         const analysable = document.URL.match(/\/forums\/(?:42|1)-/);
         if (!analysable) return;
@@ -1618,24 +1467,17 @@ extractPayloadGzip().then(payload => {
                             <li><div class="tl-setting-label"><div id="tl-sim-new-messages-counter" class="topiclive-floating-button"><span class="topiclive-counter">1</span><span class="topiclive-arrow">${arrowIconSvg}</span></div><span>Nouveau message</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-show-counter"><label for="tl-setting-show-counter" class="btn-on-off"></label></div></li>
                             <li class="tl-setting-separator">Compteur de connectés</li>
                             <li><div class="tl-setting-label"><div id="tl-sim-counter-topics" class="topiclive-floating-button tl-counter-button">14</div><span>Sur les topics</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-counter-topics"><label for="tl-setting-counter-topics" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><div id="tl-sim-counter-forums" class="topiclive-floating-button tl-counter-button">564</div><span>Sur les forums</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-counter-forums"><label for="tl-setting-counter-forums" class="btn-on-off"></label></div></li>
+
                             <li><div class="tl-setting-label"><span>Mode Mobile (ancien compteur)</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-mobile-mode"><label for="tl-setting-mobile-mode" class="btn-on-off"></label></div></li>
-                            <li class="tl-setting-separator">Intégration des médias</li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>TikTok</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-tiktok"><label for="tl-setting-embed-tiktok" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>Instagram</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-instagram"><label for="tl-setting-embed-instagram" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>YouTube</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-youtube"><label for="tl-setting-embed-youtube" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>Twitter/X</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-twitter"><label for="tl-setting-embed-twitter" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>Webmshare</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-webmshare"><label for="tl-setting-embed-webmshare" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>Streamable</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-streamable"><label for="tl-setting-embed-streamable" class="btn-on-off"></label></div></li>
-                            <li><div class="tl-setting-label"><span class="tl-setting-icon">${videoIcon}</span><span>Vocaroo</span></div><div class="tl-setting-toggle"><input type="checkbox" class="input-on-off" id="tl-setting-embed-vocaroo"><label for="tl-setting-embed-vocaroo" class="btn-on-off"></label></div></li>
+
                         </ul>
                         <div class="tl-settings-actions">
                             <button id="tl-settings-cancel" class="btn">Annuler</button>
                             <button id="tl-settings-save" class="btn btn-poster-msg">Sauvegarder</button>
                         </div>
                         <div class="tl-settings-footer">
-                            <span id="tl-show-changelog" class="tl-footer-link">Voir le changelog</span>
-                            <a href="https://github.com/moyaona/TopicLivePlus" target="_blank" class="tl-footer-link">${githubIconSvg}<span>GitHub</span></a>
+
+                            <a href="https://github.com/DreamboxMinerva/TopicLive-Reworked" target="_blank" class="tl-footer-link">${githubIconSvg}<span>GitHub</span></a>
                         </div>
                     </div>
                 </div>
@@ -1776,15 +1618,9 @@ extractPayloadGzip().then(payload => {
         $('#tl-setting-list').prop('checked', this.tempOptions.listButton);
         $('#tl-setting-list-swipe').prop('checked', this.tempOptions.listButtonSwipe);
         $('#tl-setting-counter-topics').prop('checked', this.tempOptions.counterOnTopics);
-        $('#tl-setting-counter-forums').prop('checked', this.tempOptions.counterOnForums);
+
         $('#tl-setting-mobile-mode').prop('checked', this.tempOptions.mobileMode);
-        $('#tl-setting-embed-tiktok').prop('checked', this.tempOptions.embedTiktok);
-        $('#tl-setting-embed-instagram').prop('checked', this.tempOptions.embedInstagram);
-        $('#tl-setting-embed-youtube').prop('checked', this.tempOptions.embedYoutube);
-        $('#tl-setting-embed-twitter').prop('checked', this.tempOptions.embedTwitter);
-        $('#tl-setting-embed-webmshare').prop('checked', this.tempOptions.embedWebmshare);
-        $('#tl-setting-embed-streamable').prop('checked', this.tempOptions.embedStreamable);
-        $('#tl-setting-embed-vocaroo').prop('checked', this.tempOptions.embedVocaroo);
+
         const isDarkMode = localStorage.getItem('topiclive_dark_mode') === 'true';
         $('#tl-setting-dark-mode').prop('checked', isDarkMode);
         this.$tl_settings_modal.toggleClass('tl-dark-mode', isDarkMode);
@@ -1798,7 +1634,7 @@ extractPayloadGzip().then(payload => {
         $('#tl-sim-list').toggleClass('tl-sim-disabled', !this.tempOptions.listButton);
         $('#tl-li-list-swipe').toggle(this.tempOptions.listButton);
         $('#tl-sim-counter-topics').toggleClass('tl-sim-disabled', !this.tempOptions.counterOnTopics);
-        $('#tl-sim-counter-forums').toggleClass('tl-sim-disabled', !this.tempOptions.counterOnForums);
+
     }
 
     attachSettingsListeners() {
@@ -1810,15 +1646,9 @@ extractPayloadGzip().then(payload => {
         $('#tl-setting-list').off('change').on('change', (e) => { this.tempOptions.listButton = $(e.target).is(':checked'); this.updateSimulatedButtons(); });
         $('#tl-setting-list-swipe').off('change').on('change', (e) => { this.tempOptions.listButtonSwipe = $(e.target).is(':checked'); this.updateSimulatedButtons(); });
         $('#tl-setting-counter-topics').off('change').on('change', (e) => { this.tempOptions.counterOnTopics = $(e.target).is(':checked'); this.updateSimulatedButtons(); });
-        $('#tl-setting-counter-forums').off('change').on('change', (e) => { this.tempOptions.counterOnForums = $(e.target).is(':checked'); this.updateSimulatedButtons(); });
+
         $('#tl-setting-mobile-mode').off('change').on('change', (e) => { this.tempOptions.mobileMode = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-tiktok').off('change').on('change', (e) => { this.tempOptions.embedTiktok = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-instagram').off('change').on('change', (e) => { this.tempOptions.embedInstagram = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-youtube').off('change').on('change', (e) => { this.tempOptions.embedYoutube = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-twitter').off('change').on('change', (e) => { this.tempOptions.embedTwitter = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-webmshare').off('change').on('change', (e) => { this.tempOptions.embedWebmshare = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-streamable').off('change').on('change', (e) => { this.tempOptions.embedStreamable = $(e.target).is(':checked'); });
-        $('#tl-setting-embed-vocaroo').off('change').on('change', (e) => { this.tempOptions.embedVocaroo = $(e.target).is(':checked'); });
+
     }
 
     saveSettings() {
