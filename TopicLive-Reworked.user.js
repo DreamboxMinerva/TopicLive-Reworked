@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.91
+// @version       0.92
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -1025,33 +1025,12 @@ class Favicon {
 }
 
 class MediaEmbed {
-    constructor() {
-        this.twitterWidgetScriptLoaded = false;
-    }
-
-    processNode(node) {
-        if (!TL.options) return;
-        const links = $(node).find('.txt-msg a:not([data-processed])');
-        links.each((index, link) => {
-            const $link = $(link);
-            const href = $link.attr('href');
-            if (!href || !$link.text().trim().startsWith('http')) return;
-            $link.attr('data-processed', 'true');
-            if (TL.options.embedTiktok && href.includes('tiktok.com/')) { this.handleTikTok($link, href); }
-            else if (TL.options.embedInstagram && href.includes('instagram.com/')) { this.handleInstagram($link, href); }
-            else if (TL.options.embedYoutube && (href.includes('youtube.com/') || href.includes('youtu.be/'))) { this.handleYouTube($link, href); }
-            else if (TL.options.embedTwitter && (href.includes('twitter.com/') || href.includes('x.com/'))) { this.handleTwitter($link, href); }
-            else if (TL.options.embedWebmshare && href.includes('webmshare.com/')) { this.handleWebmshare($link, href); }
-            else if (TL.options.embedStreamable && href.includes('streamable.com/')) { this.handleStreamable($link, href); }
-            if (TL.options.embedVocaroo) {
-                if (href.includes('vocaroo.com/') || href.includes('voca.ro/')) return this.handleVocaroo($link, href);
-            }
-        });
-    }
-
-
-
+    processNode() {}
 }
+
+
+
+
 
 /**
  * Classe principale TopicLive.
