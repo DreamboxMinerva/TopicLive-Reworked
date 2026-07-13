@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.92
+// @version       0.93
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -165,7 +165,7 @@ if (wrapper.length) {
 if (first) {
     console.log(first[0].previousElementSibling);
 }
-                    TL.mediaEmbed.processNode(nvMsg.$message);
+
                 const entry = {
     message: nvMsg,
     cancelled: false
@@ -202,7 +202,7 @@ dispatchEvent(new CustomEvent('topiclive:newmessage', {
                    msg.message.$message.show();
 
 msg.message.fixImages();
-TL.mediaEmbed.processNode(msg.message.$message[0]);
+
                         TL.addUnreadAnchor(msg.message.$message);
                         maj = true;
                     }
@@ -733,7 +733,7 @@ fixImages() {
         this.edition = nvMessage.edition;
         this.trouver(TL.class_contenu).html(nvMessage.trouver(TL.class_contenu).html());
         TL.page.Transformation();
-        TL.mediaEmbed.processNode(this.$message);
+
         this.fixImages();
         this.fixDeroulerCitation();
         dispatchEvent(new CustomEvent('topiclive:edition', {
@@ -1024,13 +1024,6 @@ class Favicon {
     }
 }
 
-class MediaEmbed {
-    processNode() {}
-}
-
-
-
-
 
 /**
  * Classe principale TopicLive.
@@ -1059,7 +1052,7 @@ class TopicLive {
         this.$tl_connected_counter = null;
         this.isStandby = false;
         this.changelogContent = null;
-          this.mediaEmbed = null;
+
         this.estSurDernierePage = false;
     }
 
@@ -1813,7 +1806,7 @@ this.$tl_connected_counter_clone.addClass('jvchat-hide');
     }
 
     initStatic() {
-        this.mediaEmbed = new MediaEmbed();
+
         this.favicon = new Favicon();
         this.son = new Audio('https://github.com/moyaona/TopicLivePlus/raw/refs/heads/main/notification_sound_tl.mp3');
         this.suivreOnglets();
