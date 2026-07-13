@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.90
+// @version       0.91
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -1050,7 +1050,7 @@ class MediaEmbed {
     }
 
 
-  
+
 }
 
 /**
@@ -1266,29 +1266,24 @@ extractPayloadGzip().then(payload => {
         });
     }
 
-    initOtherScriptObserver() {
-        const SELECTEUR_AUTRE_SCRIPT = '#jvchat-main';
-        const checkScriptStatus = () => {
-            if (document.querySelector(SELECTEUR_AUTRE_SCRIPT) !== null) {
-                this.standby();
-            } else {
-                this.resume();
-            }
-        };
-        const observer = new MutationObserver(checkScriptStatus);
-        observer.observe(document.body, { childList: true, subtree: true });
-        checkScriptStatus();
+   initOtherScriptObserver() {
+
+    window.addEventListener('jvchat:activation', () => {
+        console.log('[TopicLive] JvChat activé');
+        this.standby();
+    });
+
+    // Si JvChat est déjà ouvert au chargement
+    if (document.querySelector('#jvchat-main')) {
+        this.standby();
     }
+}
 
     standby() {
         if (this.isStandby) return;
         this.isStandby = true;
         window.clearTimeout(this.idanalyse);
         window.clearTimeout(this.idForumAnalyse);
-        if (this.$tl_button) this.$tl_button.hide();
-        if (this.$tl_forum_button) this.$tl_forum_button.hide();
-        if (this.$tl_quick_reply_button) this.$tl_quick_reply_button.hide();
-        if (this.$tl_connected_counter) this.$tl_connected_counter.hide();
     }
 
     resume() {
@@ -1334,6 +1329,7 @@ extractPayloadGzip().then(payload => {
         $('head').append(`<style>${buttonCss}</style>`);
 
         this.$tl_button = $(`<button id="topiclive-button" class="topiclive-floating-button"><span class="topiclive-counter"></span><span class="topiclive-arrow">${arrowIconSvg}</span></button>`).hide();
+      this.$tl_button.addClass('jvchat-hide');
         this.$tl_button.get(0).TL = this;
         $('body').append(this.$tl_button);
 
@@ -1384,6 +1380,7 @@ extractPayloadGzip().then(payload => {
     initForumListButton() {
         const listIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="17.2" height="17.2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`;
         this.$tl_forum_button = $(`<button id="topiclive-forumlist-button" class="topiclive-floating-button">${listIconSvg}</button>`).hide();
+      this.$tl_forum_button.addClass('jvchat-hide');
         $('body').append(this.$tl_forum_button);
 
         let startX = 0, startY = 0, isDragging = false;
@@ -1415,6 +1412,7 @@ extractPayloadGzip().then(payload => {
     initQuickReplyButton() {
         const replyIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="17.5" height="17.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
         this.$tl_quick_reply_button = $(`<button id="topiclive-quickreply-button" class="topiclive-floating-button">${replyIconSvg}</button>`).hide();
+      this.$tl_quick_reply_button.addClass('jvchat-hide');
         $('body').append(this.$tl_quick_reply_button);
         this.$tl_quick_reply_button.on('click', () => { this.scrollToReplyForm(); });
     }
@@ -1733,6 +1731,8 @@ initConnectedCounter()
 if (this.$tl_connected_counter_clone) this.$tl_connected_counter_clone.remove();
     this.$tl_connected_counter = $('<div id="topiclive-connected-counter" class="topiclive-floating-button tl-counter-button"></div>');
     this.$tl_connected_counter_clone = $('<div class="topiclive-floating-button tl-counter-button"></div>');
+   this.$tl_connected_counter.addClass('jvchat-hide');
+this.$tl_connected_counter_clone.addClass('jvchat-hide');
 
     $('body').append(this.$tl_connected_counter);
     $('body').append(this.$tl_connected_counter_clone);
