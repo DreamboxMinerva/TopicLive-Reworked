@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.93
+// @version       0.94
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -152,7 +152,7 @@ if (nbConnectes.length) {
                     nvMsg.initPartialQuote();
                     nvMsg.fixDeroulerCitation();
                  //   nvMsg.fixImages();
-                  console.log(nvMsg.$message[0].outerHTML);
+
                 const wrapper = nvMsg.$message.closest('[id^="message-"]');
 
 if (wrapper.length) {
@@ -160,11 +160,8 @@ if (wrapper.length) {
 } else {
     $(`${TL.class_pagination}:last`).before(nvMsg.$message);
 }
-                  const first = messages_a_afficher[0]?.message?.$message;
 
-if (first) {
-    console.log(first[0].previousElementSibling);
-}
+
 
                 const entry = {
     message: nvMsg,
@@ -286,6 +283,9 @@ class Message {
         this.date = $('.messageUser__date', $message).text().replace(/[\r\n]|#[0-9]+$/g, '');
         this.edition = $message.find('.info-edition-msg').text();
         this.$message = $message;
+      // Sauvegarde du contenu original pour pouvoir restaurer le message
+this.originalHtml = this.$message.find('.messageUser__main').html();
+this.isDeleted = false;
         this.pseudo = $('.messageUser__label', $message).text().replace(/[\r\n]/g, '');
         this.supprime = false;
     }
@@ -294,6 +294,73 @@ class Message {
         let avatar = this.trouver('.user-avatar-msg, .avatar__image');
         avatar.attr('src', avatar.data('src') || avatar.attr('src'));
     }
+
+setDeleted(data) {
+    this.isDeleted = true;
+    this.deletedData = data;
+
+    this.$message.addClass('messageUser--deleted');
+
+    const $btn = this.$message.find('.tl-delete-btn');
+
+    $btn
+        .removeClass('tl-delete-btn')
+        .addClass('tl-restore-btn')
+        .attr('title', 'Restaurer le message')
+        .find('.messageUser__actionLabel')
+        .text('Restaurer');
+
+    $btn.find('i')
+        .removeClass('icon-trash')
+        .addClass('icon-topic-restore');
+
+    const restoreUrl = data.actions?.restore?.url;
+
+    if (restoreUrl) {
+        this.$message.find('.tl-restore-btn')
+            .off('click')
+            .on('click', async () => {
+
+                try {
+                    const res = await fetch(restoreUrl, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'x-requested-with': 'XMLHttpRequest'
+                        }
+                    });
+
+                    const json = await res.json();
+
+                    if (!json.success) return;
+                  TL.showToast(json.success[0]);
+
+                    this.restore();
+
+                } catch (e) {
+                    console.error(e);
+                }
+            });
+    }
+}
+
+  restore() {
+    this.isDeleted = false;
+
+    this.$message.removeClass('messageUser--deleted');
+
+    const $btn = this.$message.find('.tl-restore-btn');
+
+    $btn
+        .removeClass('tl-restore-btn')
+        .addClass('tl-delete-btn')
+        .attr('title', 'Supprimer le message')
+        .find('.messageUser__actionLabel').text('Supprimer');
+
+    $btn.find('i')
+        .removeClass('icon-topic-restore')
+        .addClass('icon-trash');
+}
 
     fixBlacklist() {
         this.trouver('.bloc-options-msg > .picto-msg-tronche, .msg-pseudo-blacklist .btn-blacklist-cancel').on('click', () => {
@@ -351,55 +418,85 @@ class Message {
 
 
 buildActionButtons() {
+
+  console.log("TL.isModerator =", TL.isModerator);
     const actions = TL.messagesActionsMap ? TL.messagesActionsMap[this.id_message] : null;
+  console.log(actions);
     const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
     const pmUrl = actions?.privateMessage?.url || `https://www.jeuxvideo.com/messages-prives/nouveau.php?all_dest=${encodeURIComponent(pseudoPropre)}`;
     const blacklistUrl = actions?.blacklist?.url || null;
     const reportUrl = actions?.report?.url || null;
 const kickUrl = TL.isModerator ? actions?.kick?.url : null;
-console.log(actions);
+  const deleteUrl = TL.isModerator ? actions?.delete?.url : null;
+  const reportDirect = TL.isModerator ? reportUrl : null;
+
 const innerHtml = `
     <div class="tl-inline-actions" style="display:flex; align-items:center; gap:8px;">
         <button type="button" class="messageUser__action tl-quote-btn" title="Citer le message">
             <i class="messageUser__actionIcon icon-quotes"></i>
             <span class="messageUser__actionLabel">Citer le message</span>
         </button>
-        ${kickUrl ? `<button type="button" class="messageUser__action tl-kick-btn" title="Kicker l'alias">
 
+        ${kickUrl ? `<button type="button" class="messageUser__action tl-kick-btn" title="Kicker l'alias">
             <i class="messageUser__actionIcon icon-kick"></i>
             <span class="messageUser__actionLabel">Kicker l'alias</span>
         </button>` : ''}
-    </div>
-        <div class="tl-more-wrap" style="position:relative; display:inline-block;">
-       <button class="tl-more-btn" type="button" aria-label="Plus d'actions" style="background:transparent;border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;">
-    <i class="messageUser__actionIcon icon-more"></i>
-</button>
-  <div class="tl-more-menu" style="
-    display:none;
-    position:absolute;
-    top:calc(100% + 8px);
-    right:0;
-    width:250px;
-    background:rgb(46,50,56);
-    border-radius:12px;
-    border:1px solid rgb(74,76,79);
-    box-shadow:rgba(0,0,0,0.14) 0px 2px 4px -1px, rgba(0,0,0,0.098) 0px 4px 5px 0px, rgba(0,0,0,0.082) 0px 1px 10px 0px;
-    z-index:99999;
-    flex-direction:column;
-    padding:10px 0;
-    gap:14px;
-">
-    ${reportUrl ? `<button class="tl-menu-item tl-report-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
-        <i class="icon-signaler" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:#e74c3c;display:inline-flex;align-items:center;justify-content:center;"></i><span>Faire un signalement</span>
-    </button>` : ''}
-    ${blacklistUrl ? `<button class="tl-menu-item tl-blacklist-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
-        <i class="icon-black-list" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i><span>Blacklister</span>
-    </button>` : ''}
-    <a href="${pmUrl}" target="_blank" class="tl-menu-item" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);text-decoration:none;">
-        <i class="icon-pm" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i><span>Envoyer un message privé</span>
-    </a>
-</div>`;
 
+  ${reportDirect ? `
+<button type="button" class="messageUser__action tl-report-btn" title="Faire un signalement">
+    <i class="messageUser__actionIcon icon-signaler"></i>
+    <span class="messageUser__actionLabel">Faire un signalement</span>
+</button>
+` : ''}
+
+        ${deleteUrl ? `<button type="button" class="messageUser__action tl-delete-btn" title="Supprimer le message">
+            <i class="messageUser__actionIcon icon-trash"></i>
+            <span class="messageUser__actionLabel">Supprimer</span>
+        </button>` : ''}
+    </div>
+
+    <div class="tl-more-wrap" style="position:relative; display:inline-block;">
+        <button class="tl-more-btn" type="button" aria-label="Plus d'actions" style="background:transparent;border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;">
+            <i class="messageUser__actionIcon icon-more"></i>
+        </button>
+
+        <div class="tl-more-menu" style="
+            display:none;
+            position:absolute;
+            top:calc(100% + 8px);
+            right:0;
+            width:250px;
+            background:rgb(46,50,56);
+            border-radius:12px;
+            border:1px solid rgb(74,76,79);
+            box-shadow:rgba(0,0,0,0.14) 0px 2px 4px -1px, rgba(0,0,0,0.098) 0px 4px 5px 0px, rgba(0,0,0,0.082) 0px 1px 10px 0px;
+            z-index:99999;
+            flex-direction:column;
+            padding:10px 0;
+            gap:14px;
+        ">
+           ${reportUrl && !TL.isModerator ? `<button class="tl-menu-item tl-report-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
+                <i class="icon-signaler" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:#e74c3c;display:inline-flex;align-items:center;justify-content:center;"></i>
+                <span>Faire un signalement</span>
+            </button>` : ''}
+
+            ${blacklistUrl ? `<button class="tl-menu-item tl-blacklist-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
+                <i class="icon-black-list" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i>
+                <span>Blacklister</span>
+            </button>` : ''}
+
+            <a href="${pmUrl}" target="_blank" class="tl-menu-item" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);text-decoration:none;">
+                <i class="icon-pm" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i>
+                <span>Envoyer un message privé</span>
+            </a>
+        </div>
+    </div>
+
+  ${TL.isModerator ? `
+<input
+    type="checkbox"
+    class="checkboxButton messageUser__checkbox tl-checkbox">
+` : ''}`;
     let $headerActions = this.$message.find('.messageUser__headerActions');
     if ($headerActions.length === 0) {
         const $header = this.$message.find('.messageUser__header');
@@ -407,9 +504,25 @@ const innerHtml = `
             $header.append('<div class="messageUser__headerActions js-message-user-actions"></div>');
             $headerActions = this.$message.find('.messageUser__headerActions');
         }
+
+
+
     }
     if ($headerActions.length > 0 && $headerActions.find('.tl-quote-btn').length === 0) {
         $headerActions.html(innerHtml);
+      
+
+   const $checkbox = $headerActions.find('.tl-checkbox');
+
+if ($checkbox.length) {
+
+    $checkbox.data('message', this);
+
+    $checkbox.off('change').on('change', () => {
+        TL.updateSelectionBar();
+    });
+
+}
 
         const $wrap = $headerActions.find('.tl-more-wrap');
         const $moreButton = $wrap.find('.tl-more-btn');
@@ -443,13 +556,55 @@ const url = `https://www.jeuxvideo.com/forums/author/kick?message_id=${this.id_m
 
 
 if (reportUrl) {
-    $wrap.find('.tl-report-btn').off('click').on('click', () => {
-        closeModal();
-        this.openReportForm(reportUrl);
+
+    this.$message.find('.tl-report-btn')
+        .off('click')
+        .on('click', () => {
+
+            closeModal();
+            this.openReportForm(reportUrl);
+
+        });
+
+}
+
+if (deleteUrl) {
+    $headerActions.find('.tl-delete-btn').off('click').on('click', async () => {
+
+        try {
+            const res = await fetch(deleteUrl, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'x-requested-with': 'XMLHttpRequest'
+                }
+            });
+
+            const json = await res.json();
+
+            if (!json.success) return;
+TL.showToast(json.success[0]);
+            const response = await fetch(
+                `https://www.jeuxvideo.com/forums/list_messages/?permalink=1&ids=${this.id_message}`,
+                {
+                    credentials: 'include'
+                }
+            );
+
+            const data = await response.json();
+
+            if (!data.success || !data.items?.length) return;
+
+            this.setDeleted(data.items[0]);
+
+        } catch (e) {
+            console.error(e);
+        }
+
     });
 }
 
-        if (blacklistUrl) {
+      if (blacklistUrl) {
            $wrap.find('.tl-blacklist-btn').off('click').on('click', () => {
     closeModal();
     const separator = blacklistUrl.includes('?') ? '&' : '?';
@@ -708,7 +863,7 @@ fixImages() {
         const src = $img.attr('src');
         const alt = $img.attr('alt');
 
-        console.log(src);
+
 
         if (!src || !src.includes('/minis/') || !alt) return;
 
@@ -753,15 +908,7 @@ class Formulaire {
         this.observerLeMenuModeration();
     }
 
-    observerLeBouton(selecteurBouton) {
-        const observer = new MutationObserver((mutations, obs) => {
-            if (document.querySelector(selecteurBouton)) {
-                this.hook();
-                obs.disconnect();
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
+
 
     observerLeMenuModeration() {
         const SELECTEUR_MENU_MODO = '#form_alias_rang';
@@ -1054,7 +1201,97 @@ class TopicLive {
         this.changelogContent = null;
 
         this.estSurDernierePage = false;
+
     }
+
+ showToast(message, success = true) {
+
+    const $toast = $(
+        '<div style="position:fixed;top:60px;left:50%;transform:translateX(-50%);width:800px;max-width:100%;font-size:0.875rem;color:rgb(242,242,242);pointer-events:auto;background-color:' +
+        (success ? 'rgb(25,135,84)' : 'rgb(220,53,69)') +
+        ';background-clip:padding-box;border:1px solid rgba(255,255,255,0.1);box-shadow:0 16px 48px rgba(0,0,0,0.4);border-radius:12px;z-index:2147483647;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px;">' +
+            '<span>' + message + '</span>' +
+            '<button style="background:transparent;border:none;color:rgb(242,242,242);font-size:18px;cursor:pointer;line-height:1;padding:0;">×</button>' +
+        '</div>'
+    );
+
+    $('body').append($toast);
+
+    $toast.find('button').on('click', () => $toast.remove());
+
+    setTimeout(() => $toast.remove(), 4000);
+}
+
+
+updateSelectionBar() {
+
+    const count = $('.messageUser__checkbox:checked').length;
+
+    if (!this.$selectionBar || !this.$selectionBar.length) {
+
+        this.$selectionBar = $(
+            '<div class="listActions__fixed">' +
+                '<button class="simpleButton listActions__button tl-selection-delete" type="button">Supprimer</button>' +
+                '<button class="simpleButton listActions__button tl-selection-restore" type="button">Restaurer</button>' +
+            '</div>'
+        );
+
+        $('body').append(this.$selectionBar);
+    }
+
+    if (!this.selectionBarBound) {
+
+        this.selectionBarBound = true;
+
+        this.$selectionBar.find('.tl-selection-delete')
+            .off('click')
+            .on('click', () => {
+
+                $('.messageUser__checkbox:checked').each(function () {
+
+                    const message = $(this).data('message');
+
+                    if (message) {
+                        message.$message.find('.tl-delete-btn').trigger('click');
+                    } else {
+                        $(this)
+                            .closest('.messageUser')
+                            .find('[title="Supprimer le message"]')
+                            .trigger('click');
+                    }
+
+                });
+
+            });
+
+        this.$selectionBar.find('.tl-selection-restore')
+            .off('click')
+            .on('click', () => {
+
+                $('.messageUser__checkbox:checked').each(function () {
+
+                    const message = $(this).data('message');
+
+                    if (message) {
+                        message.$message.find('.tl-restore-btn').trigger('click');
+                    } else {
+                        $(this)
+                            .closest('.messageUser')
+                            .find('[title="Restaurer le message"]')
+                            .trigger('click');
+                    }
+
+                });
+
+            });
+    }
+
+    if (count === 0) {
+        this.$selectionBar.hide();
+    } else {
+        this.$selectionBar.show();
+    }
+}
 
     loadSettings() {
         const load = (key, defaultValue) => {
@@ -1241,7 +1478,7 @@ extractPayloadGzip().then(payload => {
    initOtherScriptObserver() {
 
     window.addEventListener('jvchat:activation', () => {
-        console.log('[TopicLive] JvChat activé');
+
         this.standby();
     });
 
@@ -1268,6 +1505,38 @@ extractPayloadGzip().then(payload => {
     initScrollButton() {
         const arrowIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
         const buttonCss = `
+        .messageDeleted {
+    display: flex;
+    gap: 12px;
+    padding: 18px;
+    border-radius: 8px;
+    background: #e6f3ff;
+    border: 1px solid #8fc4ff;
+}
+
+.messageDeleted__icon {
+    font-size: 22px;
+    color: #1e88e5;
+}
+
+.messageDeleted__title {
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+.messageDeleted__reason {
+    color: #444;
+}
+
+.messageDeleted__author {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #777;
+}
+
+.message--deleted {
+    opacity: .95;
+}
             .topiclive-floating-button { z-index: 1000; font-weight: bold; color: white; background-color: rgba(22, 22, 22, 0.3); border: 1px solid rgba(74, 74, 74, 1); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); cursor: pointer; display: flex; align-items: center; height: 35px; width: 35px; border-radius: 50%; padding: 0; justify-content: center; transform: translateZ(0); transition: width 0.3s ease, padding 0.3s ease, border-radius 0.3s ease, background-color 0.2s ease, transform 0.2s ease; }
             .topiclive-floating-button:hover { background-color: rgba(40, 40, 40, 0.9); transform: translateY(-2px); }
             .topiclive-floating-button:active { transform: translateY(1px); }
@@ -1292,6 +1561,7 @@ extractPayloadGzip().then(payload => {
 .container__messages {
     margin-bottom: 0 !important;
 }
+
 
 .pagination__navigation--bottom {
     margin-top: 0.625rem !important;
