@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.94
+// @version       0.95
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -143,23 +143,19 @@ if (nbConnectes.length) {
                 }
 
                 if (nv && isOnLastPage) {
-                    TL.messages.push(nvMsg);
-                    TL.nvxMessages++;
-                    nvMsg.$message.hide();
+                   TL.messages.push(nvMsg);
+TL.nvxMessages++;
+
+// Le nouveau message doit rester dans #listMessages
+$('#listMessages').append(nvMsg.$message);
+
+nvMsg.$message.hide();
                     nvMsg.fixAvatar();
                     nvMsg.fixBlacklist();
                     setTimeout(() => { nvMsg.fixCitation(TL.ajaxTs, TL.ajaxHash); }, 1500);
                     nvMsg.initPartialQuote();
                     nvMsg.fixDeroulerCitation();
                  //   nvMsg.fixImages();
-
-                const wrapper = nvMsg.$message.closest('[id^="message-"]');
-
-if (wrapper.length) {
-    $(`${TL.class_pagination}:last`).before(wrapper);
-} else {
-    $(`${TL.class_pagination}:last`).before(nvMsg.$message);
-}
 
 
 
@@ -200,36 +196,39 @@ dispatchEvent(new CustomEvent('topiclive:newmessage', {
 
 msg.message.fixImages();
 
-                        TL.addUnreadAnchor(msg.message.$message);
+                                TL.addUnreadAnchor(msg.message.$message);
                         maj = true;
                     }
                 }
-
 
                 if (isTextareaFocused) {
                     const newScrollTop = document.documentElement.scrollHeight - distanceFromBottom;
                     $(window).scrollTop(newScrollTop);
                 }
+
                 if (maj) {
                     this.maj();
-                  $('.messageUser.js-hybrid-component').each(function(index) {
-    this.classList.toggle('background-citation', index % 2 === 1);
-});
+
                     if (TL.justPostedMessageId) {
                         const messageSelector = `${TL.class_msg}[id="message-${TL.justPostedMessageId}"]`;
                         const $myNewMessage = $(messageSelector);
+
                         if ($myNewMessage.length > 0) {
                             TL.isChatModeActive = true;
                             const targetScrollTop = $myNewMessage.offset().top - 100;
                             $('html, body').stop().animate({ scrollTop: targetScrollTop }, 800);
                             TL.updateCounters();
                         }
+
                         TL.justPostedMessageId = null;
+
                     } else if (TL.isChatModeActive && !isTextareaFocused) {
+
                         if ($firstNewMessageToShow) {
                             const targetScrollTop = $firstNewMessageToShow.offset().top - 100;
                             $('html, body').animate({ scrollTop: targetScrollTop }, 800);
                         }
+
                     } else {
                         TL.updateCounters();
                     }
@@ -237,6 +236,7 @@ msg.message.fixImages();
 
             }, 1000);
         }
+
         TL.loop();
     }
 
@@ -510,7 +510,7 @@ const innerHtml = `
     }
     if ($headerActions.length > 0 && $headerActions.find('.tl-quote-btn').length === 0) {
         $headerActions.html(innerHtml);
-      
+
 
    const $checkbox = $headerActions.find('.tl-checkbox');
 
@@ -858,12 +858,13 @@ openKickForm(kickUrl) {
     }
 
 fixImages() {
+
+    // Images <img>
     this.trouver(TL.class_contenu).find('img').each(function () {
+
         const $img = $(this);
         const src = $img.attr('src');
         const alt = $img.attr('alt');
-
-
 
         if (!src || !src.includes('/minis/') || !alt) return;
 
@@ -876,7 +877,20 @@ fixImages() {
             .css('object-fit', 'contain');
 
         this.src = direct;
+
     });
+
+    // Images Noelshack en background
+    this.trouver(TL.class_contenu).find('.js-lazy').each(function () {
+
+        const url = $(this).attr('data-src-background');
+
+        if (!url) return;
+
+        $(this).css('background-image', `url("${url}")`);
+
+    });
+
 }
 
     trouver(chose) {
