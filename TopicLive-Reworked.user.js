@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       0.95
+// @version       1.0
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -419,9 +419,9 @@ setDeleted(data) {
 
 buildActionButtons() {
 
-  console.log("TL.isModerator =", TL.isModerator);
+
     const actions = TL.messagesActionsMap ? TL.messagesActionsMap[this.id_message] : null;
-  console.log(actions);
+
     const pseudoPropre = this.pseudo.trim().replace(/\s+/g, ' ');
     const pmUrl = actions?.privateMessage?.url || `https://www.jeuxvideo.com/messages-prives/nouveau.php?all_dest=${encodeURIComponent(pseudoPropre)}`;
     const blacklistUrl = actions?.blacklist?.url || null;
@@ -455,42 +455,60 @@ const innerHtml = `
         </button>` : ''}
     </div>
 
-    <div class="tl-more-wrap" style="position:relative; display:inline-block;">
-        <button class="tl-more-btn" type="button" aria-label="Plus d'actions" style="background:transparent;border:none;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;">
-            <i class="messageUser__actionIcon icon-more"></i>
-        </button>
+   <div class="messageUser__moreContainer">
 
-        <div class="tl-more-menu" style="
-            display:none;
-            position:absolute;
-            top:calc(100% + 8px);
-            right:0;
-            width:250px;
-            background:rgb(46,50,56);
-            border-radius:12px;
-            border:1px solid rgb(74,76,79);
-            box-shadow:rgba(0,0,0,0.14) 0px 2px 4px -1px, rgba(0,0,0,0.098) 0px 4px 5px 0px, rgba(0,0,0,0.082) 0px 1px 10px 0px;
-            z-index:99999;
-            flex-direction:column;
-            padding:10px 0;
-            gap:14px;
-        ">
-           ${reportUrl && !TL.isModerator ? `<button class="tl-menu-item tl-report-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
-                <i class="icon-signaler" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:#e74c3c;display:inline-flex;align-items:center;justify-content:center;"></i>
-                <span>Faire un signalement</span>
-            </button>` : ''}
+    <button class="messageUser__moreButton"
+            type="button"
+            aria-label="Plus d'actions">
+        <i class="messageUser__actionIcon icon-more"></i>
+    </button>
 
-            ${blacklistUrl ? `<button class="tl-menu-item tl-blacklist-btn" type="button" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);">
-                <i class="icon-black-list" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i>
-                <span>Blacklister</span>
-            </button>` : ''}
+    <div class="messageUser__modalContainer">
+        <div class="messageUser__fills">
 
-            <a href="${pmUrl}" target="_blank" class="tl-menu-item" style="display:flex;align-items:center;gap:10px;width:100%;padding:0 15px;border:none;background:transparent;cursor:pointer;font-size:15px;font-weight:700;text-align:left;color:rgb(242,242,242);text-decoration:none;">
-                <i class="icon-pm" style="font-size:24px;width:24px;height:24px;flex-shrink:0;color:rgb(158,158,158);display:inline-flex;align-items:center;justify-content:center;"></i>
-                <span>Envoyer un message privé</span>
+            ${reportUrl && !TL.isModerator ? `
+            <button class="messageUser__action tl-report-btn"
+                    type="button"
+                    title="Faire un signalement">
+                <i class="messageUser__actionIcon icon-signaler"></i>
+                <span class="messageUser__actionLabel messageUser__actionLabel--showLabel">
+                    Faire un signalement
+                </span>
+            </button>
+            ` : ''}
+
+            ${blacklistUrl ? `
+            <button class="messageUser__action tl-blacklist-btn"
+                    type="button"
+                    title="Blacklister">
+                <i class="messageUser__actionIcon icon-black-list"></i>
+                <span class="messageUser__actionLabel messageUser__actionLabel--showLabel">
+                    Blacklister
+                </span>
+            </button>
+            ` : ''}
+
+            <a href="${pmUrl}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="messageUser__action"
+               title="Envoyer un message privé">
+                <i class="messageUser__actionIcon icon-pm"></i>
+                <span class="messageUser__actionLabel messageUser__actionLabel--showLabel">
+                    Envoyer un message privé
+                </span>
             </a>
+
+            <button type="button" class="messageUser__cancel">
+                Annuler
+            </button>
+
         </div>
     </div>
+
+    <div class="messageUser__overlay" aria-hidden="true"></div>
+
+</div>
 
   ${TL.isModerator ? `
 <input
@@ -524,27 +542,41 @@ if ($checkbox.length) {
 
 }
 
-        const $wrap = $headerActions.find('.tl-more-wrap');
-        const $moreButton = $wrap.find('.tl-more-btn');
-        const $menu = $wrap.find('.tl-more-menu');
+       const $wrap = $headerActions.find('.messageUser__moreContainer');
+const $moreButton = $wrap.find('.messageUser__moreButton');
+const $menu = $wrap.find('.messageUser__modalContainer');
+const $overlay = $wrap.find('.messageUser__overlay');
 
-        $headerActions.find('.tl-menu-item').hover(
-            function() { $(this).css('background', 'rgba(255,255,255,0.08)'); },
-            function() { $(this).css('background', 'transparent'); }
-        );
+const openModal = () => {
+    $menu.addClass('messageUser__modalContainer--isOpen');
+};
 
-        const openModal = () => $menu.css('display', 'flex');
-        const closeModal = () => $menu.css('display', 'none');
+const closeModal = () => {
+    $menu.removeClass('messageUser__modalContainer--isOpen');
+};
 
-        $moreButton.off('click').on('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if ($menu.css('display') === 'flex') { closeModal(); } else { openModal(); }
-        });
+$moreButton.off('click').on('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-        $(document).off(`click.tlmenu-${this.id_message}`).on(`click.tlmenu-${this.id_message}`, (e) => {
-            if (!$(e.target).closest($wrap).length) closeModal();
-        });
+    if ($menu.hasClass('messageUser__modalContainer--isOpen')) {
+        closeModal();
+    } else {
+        openModal();
+    }
+});
+
+$overlay.off('click').on('click', closeModal);
+
+$(document)
+    .off(`click.tlmenu-${this.id_message}`)
+    .on(`click.tlmenu-${this.id_message}`, (e) => {
+        if (!$(e.target).closest($wrap).length) {
+            closeModal();
+        }
+    });
+
+$wrap.find('.messageUser__cancel').off('click').on('click', closeModal);
 
 if (kickUrl) {
     $headerActions.find('.tl-kick-btn').off('click').on('click', () => {
@@ -604,61 +636,137 @@ TL.showToast(json.success[0]);
     });
 }
 
-      if (blacklistUrl) {
-           $wrap.find('.tl-blacklist-btn').off('click').on('click', () => {
-    closeModal();
-    const separator = blacklistUrl.includes('?') ? '&' : '?';
-    const fullUrl = blacklistUrl.includes('action=') ? blacklistUrl : `${blacklistUrl}${separator}action=add`;
+    if (blacklistUrl) {
+    $wrap.find('.tl-blacklist-btn').off('click').on('click', () => {
 
- fetch(fullUrl, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'x-requested-with': 'XMLHttpRequest' }
+        const separator = blacklistUrl.includes('?') ? '&' : '?';
+        const fullUrl = blacklistUrl.includes('action=') ? blacklistUrl : `${blacklistUrl}${separator}action=add`;
 
+        const $btn = $wrap.find('.tl-blacklist-btn');
 
+        $btn
+            .prop('disabled', true)
+            .attr('aria-busy', 'true');
 
-})
-    .then(r => r.json())
-    .then(data => {
-        if (data && data.success) {
-            const aliasId = blacklistUrl.match(/alias_id=(\d+)/)?.[1];
-            const ajaxHashMatch = blacklistUrl.match(/ajax_hash=([^&]+)/)?.[1];
-            const removeUrl = `https://www.jeuxvideo.com/forums/author/blacklist?alias_id=${aliasId}&ajax_hash=${ajaxHashMatch}&action=delete`;
+        if (!$btn.find('.messageUser__loader').length) {
+            $btn.prepend('<span class="loader messageUser__loader"></span>');
+        }
 
-            const $card = this.$message.find('.messageUser__card');
-            const originalHtml = $card.html();
+        fetch(fullUrl, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'x-requested-with': 'XMLHttpRequest'
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
 
-            $card.html(`
-                <div class="messageUser__header">
-                    <div class="messageUser__profil">
-                        <div class="messageUser__label">Auteur blacklisté</div>
-                        <div class="messageUser__date">${this.date.trim()}</div>
-                    </div>
-                </div>
-                <div class="messageUser__main">
-                    <span class="messageUser__blacklistedText">Ce pseudo figure dans votre blacklist</span>
-                    <button type="button" aria-label="Voir le message de l'utilisateur blacklisté" class="messageUser__link tl-view-blacklisted-btn">Voir le message</button> | <button type="button" aria-label="Retirer cet utilisateur de ma blacklist" class="messageUser__link tl-unblacklist-btn">Retirer de la blacklist</button>
-                </div>
-            `);
-            this.$message.addClass('messageUser--blacklisted');
+            closeModal();
 
-            this.$message.find('.tl-view-blacklisted-btn').on('click', () => {
-                $card.html(originalHtml);
-                this.$message.removeClass('messageUser--blacklisted');
-            });
+            if (data && data.success) {
 
-        this.$message.find('.tl-unblacklist-btn').on('click', () => {
+                const aliasId = blacklistUrl.match(/alias_id=(\d+)/)?.[1];
+                const ajaxHashMatch = blacklistUrl.match(/ajax_hash=([^&]+)/)?.[1];
+                const removeUrl = `https://www.jeuxvideo.com/forums/author/blacklist?alias_id=${aliasId}&ajax_hash=${ajaxHashMatch}&action=delete`;
+
+               const $card = this.$message.find('.messageUser__card');
+const $header = $card.find('.messageUser__header');
+const $main = $card.find('.messageUser__main');
+
+$header.hide();
+$main.hide();
+
+$card.append(`
+<div class="tl-blacklist-box">
+    <div class="messageUser__header">
+        <div class="messageUser__profil">
+            <div class="messageUser__label">Auteur blacklisté</div>
+            <div class="messageUser__date">${this.date.trim()}</div>
+        </div>
+    </div>
+
+    <div class="messageUser__main">
+        <span class="messageUser__blacklistedText">
+            Ce pseudo figure dans votre blacklist
+        </span>
+
+        <button type="button"
+                class="messageUser__link tl-view-blacklisted-btn">
+            Voir le message
+        </button>
+        |
+
+        <button type="button"
+                class="messageUser__link tl-unblacklist-btn">
+            Retirer de la blacklist
+        </button>
+    </div>
+</div>
+`);
+
+                this.$message.addClass('messageUser--blacklisted');
+
+                this.$message.find('.tl-view-blacklisted-btn').on('click', () => {
+                 $card.find('.tl-blacklist-box').remove();
+
+$header.show();
+$main.show();
+
+this.$message.removeClass('messageUser--blacklisted');
+                });
+
+           this.$message.find('.tl-unblacklist-btn').on('click', () => {
+    const $removeBtn = this.$message.find('.tl-unblacklist-btn');
+
+    $removeBtn.prop('disabled', true);
+
+    if (!$removeBtn.find('.messageUser__loaderInline').length) {
+        $removeBtn.prepend('<span class="loader messageUser__loaderInline"></span>');
+    }
+
     fetch(removeUrl, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'x-requested-with': 'XMLHttpRequest' }
-    }).then(() => location.reload());
-});
+        headers: {
+            'x-requested-with': 'XMLHttpRequest'
         }
     })
-    .catch(err => console.error('[TopicLive+] Erreur blacklist:', err));
-});
+    .then(r => r.json())
+    .then(data => {
+        if (data && data.success) {
+         $card.find('.tl-blacklist-box').remove();
+
+$header.show();
+$main.show();
+
+this.$message.removeClass('messageUser--blacklisted');
         }
+    })
+    .catch(err => {
+        console.error('[TopicLive+] Erreur retrait blacklist:', err);
+    })
+    .finally(() => {
+        $removeBtn.find('.messageUser__loaderInline').remove();
+        $removeBtn.prop('disabled', false);
+    });
+});
+            }
+        })
+        .catch(err => {
+            closeModal();
+            console.error('[TopicLive+] Erreur blacklist:', err);
+        })
+        .finally(() => {
+            $btn.find('.messageUser__loader').remove();
+
+            $btn
+                .prop('disabled', false)
+                .removeAttr('aria-busy');
+        });
+
+    });
+}
     }
 }
 
@@ -725,12 +833,16 @@ const pseudoMessage = this.pseudo.trim();
                     body: formData.toString()
                 })
                 .then(r => r.json())
-                .then(() => {
-                    $overlay.find('.tl-report-msg')
-                        .css('color', '#22c55e')
-                        .text(data.locales?.success || 'Signalement envoyé.');
-                    setTimeout(() => $overlay.remove(), 1500);
-                })
+              .then(res => {
+    if (res.success && res.success.length) {
+        TL.showToast(res.success[0]);
+        $overlay.remove();
+    } else {
+        $overlay.find('.tl-report-msg')
+            .css('color', '#ef4444')
+            .text('Erreur lors du signalement.');
+    }
+})
                 .catch(() => {
                     $overlay.find('.tl-report-msg')
                         .css('color', '#ef4444')
@@ -788,15 +900,14 @@ openKickForm(kickUrl) {
                     })
                         .then(r => r.json())
                         .then(res => { console.log('[TL DEBUG] réponse kick:', JSON.stringify(res));
-                           if (res.success) {
+             if (res.success) {
     $overlay.remove();
-    const $toast = $('<div style="position:fixed;top:60px;left:50%;transform:translateX(-50%);width:800px;max-width:100%;font-size:0.875rem;color:rgb(242,242,242);pointer-events:auto;background-color:rgb(25,135,84);background-clip:padding-box;border:1px solid rgba(255,255,255,0.1);box-shadow:0 16px 48px rgba(0,0,0,0.4);border-radius:12px;z-index:2147483647;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px;"><span>L\'utilisateur a été kické.</span><button style="background:transparent;border:none;color:rgb(242,242,242);font-size:18px;cursor:pointer;line-height:1;padding:0;">×</button></div>');
-    $('body').append($toast);
-    $toast.find('button').on('click', () => $toast.remove());
-    setTimeout(() => $toast.remove(), 4000);
+    TL.showToast(res.success[0] || "L'utilisateur a été kické.");
 } else {
-                                $overlay.find('.tl-kick-msg').css('color', '#ef4444').text((res.errors || ['Erreur lors du kick.']).join(' '));
-                            }
+    $overlay.find('.tl-kick-msg')
+        .css('color', '#ef4444')
+        .text((res.errors || ['Erreur lors du kick.']).join(' '));
+}
                         })
                         .catch(() => { $overlay.find('.tl-kick-msg').css('color', '#ef4444').text('Erreur réseau.'); });
                 });
@@ -1747,8 +1858,10 @@ extractPayloadGzip().then(payload => {
             :root { --tl-bg-light: #f5f5f5; --tl-text-light: #333; --tl-border-light: #e0e0e0; --tl-header-bg-light: #f5f5f5; --tl-header-text-light: #111; --tl-separator-bg-light: #e0e0e0; --tl-bg-dark: #2d2d2d; --tl-text-dark: #f0f0f0; --tl-border-dark: #444; --tl-header-bg-dark: #1e1e1e; --tl-header-text-dark: #f0f0f0; --tl-separator-bg-dark: #444; }
             .topiclive-deleted .messageUser__card { background-color: rgba(128, 128, 128, 0.5) !important; border: 1px solid rgba(128, 128, 128, 0.5); border-radius: 8px; opacity: 0.7; }
             .bloc-pre-right { flex-wrap: wrap; row-gap: 0.625rem; column-gap: 0.3125rem; display: flex; }
-            .tl-settings-button { color: white !important; background: linear-gradient(90deg, rgba(0, 82, 204, 0.5), rgba(244, 128, 34, 0.5)) !important; border: 1px solid #F48022 !important; transition: all 0.2s ease-in-out !important; font-weight: bold !important; padding: 4px 10px !important; font-size: 13px !important; line-height: 1.5 !important; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-            .tl-settings-button:hover { transform: scale(1.03); filter: brightness(115%); }
+.tl-settings-button {
+    text-decoration: none;
+}
+
             #tl-settings-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9998; }
             #tl-settings-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 10px; box-sizing: border-box; }
             .tl-smartphone-frame { width: 100%; max-width: 340px; max-height: 70vh; background: #111; border: 2px solid #000; border-radius: 20px; padding: 5px; box-shadow: 0 5px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
@@ -1839,26 +1952,50 @@ extractPayloadGzip().then(payload => {
         $('#tl-changelog-close').on('click', closeChangelog);
         $changelogOverlay.on('click', closeChangelog);
 
-        // ── NOUVEAU : bouton settings dans la nouvelle barre navbar JVC ──
-        const observer = new MutationObserver(() => {
-            const targetContainers = document.querySelectorAll('.buttonsNavbar__list, .buttonsNavbar');
-            targetContainers.forEach(container => {
-                if (container && container.querySelector('.tl-settings-button') === null) {
-                    const button = document.createElement('button');
-                    button.className = 'btn tl-settings-button';
-                    button.title = 'Paramètres TopicLive+';
-                    button.textContent = 'TopicLive+';
-                    container.appendChild(button);
-                }
-            });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+      // ── Bouton settings dans la navbar JVC ──
+const observer = new MutationObserver(() => {
+    const targetContainers = document.querySelectorAll('.buttonsNavbar__list, .buttonsNavbar');
 
-        $(document).on('click', '.tl-settings-button', () => {
+    targetContainers.forEach(container => {
+
+        if (container.querySelector('.tl-settings-button')) return;
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'buttonsNavbar__button tl-settings-button';
+        button.title = 'Paramètres TopicLive+';
+
+
+
+button.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg"
+         width="17.5"
+         height="17.5"
+         viewBox="0 0 24 24"
+         fill="none"
+         stroke="currentColor"
+         stroke-width="3"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         class="buttonsNavbar__icon">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+    <div class="buttonsNavbar__label">TopicLive</div>
+`;
+        button.onclick = () => {
             this.populateSettings();
             this.$tl_settings_modal.show();
             this.$tl_settings_overlay.show();
-        });
+        };
+
+        container.appendChild(button);
+    });
+});
+
+observer.observe(document.body, {
+    childList: true,
+    subtree: true
+});
     }
 
     populateSettings() {
@@ -2014,37 +2151,66 @@ this.$tl_connected_counter_clone.addClass('jvchat-hide');
         });
     }
 
-    updateDesktopButtonPosition() {
-        if (!this.$tl_button || !this.$tl_forum_button || !this.$tl_connected_counter || !this.$tl_quick_reply_button) return;
-        const isMobileView = $(window).width() < 985;
-        const scrollButtonBottom = isMobileView ? 20 : 25;
-        const listButtonBottom = scrollButtonBottom + 35 + 8;
-        const replyButtonBottom = listButtonBottom + 35 + 8;
-        const counterTop = isMobileView ? 60 : 100;
-        if (isMobileView) {
-            this.$tl_button.css({ position: 'fixed', bottom: `${scrollButtonBottom}px`, right: '20px', left: 'auto', top: 'auto' });
-            this.$tl_forum_button.css({ position: 'fixed', bottom: `${listButtonBottom}px`, right: '20px', left: 'auto', top: 'auto' });
-            this.$tl_quick_reply_button.css({ position: 'fixed', bottom: `${replyButtonBottom}px`, right: '20px', left: 'auto', top: 'auto' });
-            this.$tl_connected_counter.css({ position: 'fixed', top: `${counterTop}px`, right: '20px', left: 'auto', bottom: 'auto' });
-        } else {
-            let $container = $('.conteneur-messages-pagi, .conteneur-topic-pagi, .container__main');
-            if ($container.length > 0) {
-                const basePositionRight = $container.offset().left + $container.outerWidth() + 15;
-                const decalageGauche = 11;
-                this.$tl_connected_counter.css({ position: 'fixed', top: `${counterTop}px`, left: `${basePositionRight - decalageGauche}px`, right: 'auto', bottom: 'auto' });
-              this.$tl_connected_counter_clone.css({
-    position: 'fixed',
-    bottom: `${replyButtonBottom + 43}px`,
-    left: `${basePositionRight}px`,
-    right: 'auto',
-    top: 'auto'
-});
-                this.$tl_button.css({ position: 'fixed', bottom: `${scrollButtonBottom}px`, left: `${basePositionRight}px`, right: 'auto', top: 'auto' });
-                this.$tl_forum_button.css({ position: 'fixed', bottom: `${listButtonBottom}px`, left: `${basePositionRight}px`, right: 'auto', top: 'auto' });
-                this.$tl_quick_reply_button.css({ position: 'fixed', bottom: `${replyButtonBottom}px`, left: `${basePositionRight}px`, right: 'auto', top: 'auto' });
-            }
-        }
+updateDesktopButtonPosition() {
+    if (!this.$tl_button || !this.$tl_forum_button || !this.$tl_quick_reply_button) return;
+
+    const scrollButtonBottom = 25;
+    const listButtonBottom = scrollButtonBottom + 35 + 8;
+    const replyButtonBottom = listButtonBottom + 35 + 8;
+
+    const $container = $('.conteneur-messages-pagi, .conteneur-topic-pagi, .container__main');
+    if (!$container.length) return;
+
+    const basePositionRight = Math.round(
+        $container.offset().left + $container.outerWidth() + 15
+    );
+
+    if (this.$tl_connected_counter_clone) {
+        this.$tl_connected_counter_clone.css({
+            position: 'fixed',
+            bottom: `${replyButtonBottom + 43}px`,
+            left: `${basePositionRight}px`,
+            right: 'auto',
+            top: 'auto',
+            transform: 'translateX(0)'
+        });
     }
+
+    this.$tl_button.css({
+        position: 'fixed',
+        bottom: `${scrollButtonBottom}px`,
+        left: `${basePositionRight}px`,
+        right: 'auto',
+        top: 'auto'
+    });
+
+    this.$tl_forum_button.css({
+        position: 'fixed',
+        bottom: `${listButtonBottom}px`,
+        left: `${basePositionRight}px`,
+        right: 'auto',
+        top: 'auto'
+    });
+
+    this.$tl_quick_reply_button.css({
+        position: 'fixed',
+        bottom: `${replyButtonBottom}px`,
+        left: `${basePositionRight}px`,
+        right: 'auto',
+        top: 'auto'
+    });
+
+    if (this.$tl_connected_counter) {
+        this.$tl_connected_counter.css({
+            position: 'fixed',
+            top: '60px',
+            right: '20px',
+            left: 'auto',
+            bottom: 'auto'
+        });
+    }
+}
+
 
     updateCounters() {
         if (this.isStandby || this.isForumPage) return;
