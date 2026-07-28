@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       1.0.1
+// @version       1.0.2
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -900,9 +900,16 @@ openKickForm(kickUrl) {
                     })
                         .then(r => r.json())
                         .then(res => { console.log('[TL DEBUG] réponse kick:', JSON.stringify(res));
-             if (res.success) {
+     if (res.success) {
     $overlay.remove();
     TL.showToast(res.success[0] || "L'utilisateur a été kické.");
+
+    const $kickBtn = this.$message.find('.tl-kick-btn');
+
+    $kickBtn
+        .find('i')
+        .removeClass('icon-kick')
+        .addClass('icon-kick-active');
 } else {
     $overlay.find('.tl-kick-msg')
         .css('color', '#ef4444')
@@ -2267,7 +2274,9 @@ updateDesktopButtonPosition() {
         this.initQuickReplyButton();
         this.initConnectedCounter();
         this.initPartialQuoteSystem();
-        this.initSettingsMenu();
+        if (window.location.pathname.startsWith('/forums/0-')) {
+    this.initSettingsMenu();
+}
         this.initOtherScriptObserver();
         this.init();
         addEventListener('instantclick:newpage', this.init.bind(this));
