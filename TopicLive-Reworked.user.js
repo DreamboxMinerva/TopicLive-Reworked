@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       1.0.2
+// @version       1.0.3
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -814,23 +814,23 @@ const pseudoMessage = this.pseudo.trim();
                     return;
                 }
 
-                const formData = new URLSearchParams();
-                formData.set('motif', motifId);
-                formData.set('reason', motifLabel || '');
-                formData.set('formType', 'signalement');
+                const formData = new FormData();
+                formData.append('motif', motifId);
+                formData.append('reason', motifLabel || '');
+                formData.append('formType', 'signalement');
 
                 for (const key in data.formSession) {
-                    formData.set(key, data.formSession[key]);
+                    formData.append(key, data.formSession[key]);
                 }
 
                 fetch(reportUrl, {
                     method: 'POST',
                     credentials: 'include',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'x-requested-with': 'XMLHttpRequest'
+                        'x-requested-with': 'XMLHttpRequest',
+                        'Accept': 'application/json'
                     },
-                    body: formData.toString()
+                    body: formData
                 })
                 .then(r => r.json())
               .then(res => {
@@ -884,19 +884,22 @@ openKickForm(kickUrl) {
                     const raison = $overlay.find('.tl-kick-raison').val().trim();
                     if (!motifId) { $overlay.find('.tl-kick-msg').css('color', '#ef4444').text('Le motif est obligatoire.'); return; }
                     if (!raison) { $overlay.find('.tl-kick-msg').css('color', '#ef4444').text('La raison est obligatoire.'); return; }
-                    const formData = new URLSearchParams();
-                    formData.set('message_id', this.id_message);
-                    formData.set('forum_id', TL.currentForumId);
-                    formData.set('ajax_hash', TL.ajaxHash);
-                    formData.set('action', 'submit');
-                    formData.set('motif_kick', motifId);
-                    formData.set('raison_kick', raison);
-                    formData.set('duree_kick', '3');
+                    const formData = new FormData();
+                    formData.append('message_id', this.id_message);
+                    formData.append('forum_id', TL.currentForumId);
+                    formData.append('ajax_hash', TL.ajaxHash);
+                    formData.append('action', 'submit');
+                    formData.append('motif_kick', motifId);
+                    formData.append('raison_kick', raison);
+                    formData.append('duree_kick', '3');
                     fetch(kickUrl + '&action=submit', {
                         method: 'POST',
                         credentials: 'include',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-requested-with': 'XMLHttpRequest' },
-                        body: formData.toString()
+                        headers: {
+                            'x-requested-with': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: formData
                     })
                         .then(r => r.json())
                         .then(res => { console.log('[TL DEBUG] réponse kick:', JSON.stringify(res));
