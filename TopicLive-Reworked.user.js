@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       1.0.5
+// @version       1.0.6
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -863,7 +863,7 @@ openKickForm(kickUrl) {
                 for (const category in data.reasons) {
                     optionsHtml += '<optgroup label="' + category + '">';
                  for (const reason of data.reasons[category]) {
-    const desc = reason.description ? '  ' + reason.description : '';
+    const desc = reason.description ? ' — ' + reason.description : '';
     optionsHtml += '<option value="' + reason.id + '" data-label="' + reason.label + '" title="' + (reason.description || '') + '">' + reason.label + '</option>';
 }
                     optionsHtml += '</optgroup>';
@@ -1594,18 +1594,17 @@ extractPayloadGzip().then(payload => {
                 const pageVoulue = pageActuelle + 1;
                 const estRedirection = pageRetournee !== null && pageRetournee !== pageVoulue;
 
-                if (postsSuivants > 0 && !estRedirection) {
-
-                } else {
-                    this.estSurDernierePage = true;
-                    this.page.scan();
-                    this.loop();
-                }
-            },
-            error: () => {
-                this.estSurDernierePage = true;
-                this.page.scan();
-                this.loop();
+              if (postsSuivants > 0 && !estRedirection) {
+    // Une page suivante existe : on bascule le suivi dessus.
+    this.estSurDernierePage = false;
+    this.url = urlPageSuivante;
+    this.page.scan();
+    this.loop();
+} else {
+    this.estSurDernierePage = true;
+    this.page.scan();
+    this.loop();
+}
             }
         });
     }
@@ -1962,40 +1961,38 @@ extractPayloadGzip().then(payload => {
         $('#tl-changelog-close').on('click', closeChangelog);
         $changelogOverlay.on('click', closeChangelog);
 
- // ── Bouton settings dans la navbar JVC ──
-const attachSettingsButton = () => {
+      // ── Bouton settings dans la navbar JVC ──
+const observer = new MutationObserver(() => {
     const targetContainers = document.querySelectorAll(
-        '.buttonsNavbar__sticky .buttonsNavbar'
-    );
+    '.buttonsNavbar__sticky .buttonsNavbar'
+);
 
     targetContainers.forEach(container => {
 
-        // Évite de créer plusieurs boutons
         if (container.querySelector('.tl-settings-button')) return;
 
         const button = document.createElement('button');
-
         button.type = 'button';
         button.className = 'buttonsNavbar__button tl-settings-button';
         button.title = 'Paramètres TopicLive+';
 
-        button.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg"
-                 width="17.5"
-                 height="17.5"
-                 viewBox="0 0 24 24"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="3"
-                 stroke-linecap="round"
-                 stroke-linejoin="round"
-                 class="buttonsNavbar__icon">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
 
-            <div class="buttonsNavbar__label">TopicLive</div>
-        `;
 
+button.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg"
+         width="17.5"
+         height="17.5"
+         viewBox="0 0 24 24"
+         fill="none"
+         stroke="currentColor"
+         stroke-width="3"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+         class="buttonsNavbar__icon">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+    <div class="buttonsNavbar__label">TopicLive</div>
+`;
         button.onclick = () => {
             this.populateSettings();
             this.$tl_settings_modal.show();
@@ -2004,28 +2001,12 @@ const attachSettingsButton = () => {
 
         container.appendChild(button);
     });
-};
-
-
-// ── Première tentative immédiate ──
-attachSettingsButton();
-
-
-// ── Surveillance des changements du DOM ──
-const observer = new MutationObserver(() => {
-    attachSettingsButton();
 });
 
 observer.observe(document.body, {
     childList: true,
     subtree: true
 });
-
-
-// ── Filets de sécurité ──
-setTimeout(attachSettingsButton, 500);
-setTimeout(attachSettingsButton, 1500);
-setTimeout(attachSettingsButton, 3000);
     }
 
     populateSettings() {
