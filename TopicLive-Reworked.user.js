@@ -9,7 +9,7 @@
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       1.0.6
+// @version       1.0.7
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
@@ -1313,6 +1313,9 @@ class Favicon {
 class TopicLive {
     constructor() {
         this.isLoading = false;
+        // Polling plus espacé et temporisation adaptative en cas de HTTP 429.
+        this.retryDelayMs = null;
+        this.rateLimitBackoffMs = 0;
         this.instance = 0;
         this.ongletActif = !document.hidden;
         this.unreadMessageAnchors = [];
@@ -1499,7 +1502,6 @@ updateSelectionBar() {
         this.estMP = false;
         this.url = document.URL;
         window.clearTimeout(this.idCounterPoll);
-        this.pollConnectedCounter();
 
 this.messagesActionsMap = {};
 this.messagesTextMap = {};
@@ -1581,11 +1583,14 @@ extractPayloadGzip().then(payload => {
         testUrl[3] = pageActuelle + 1;
         const urlPageSuivante = testUrl.join('-');
 
+        if (this.isLoading) return;
+        this.isLoading = true;
         $.ajax({
             type: 'GET',
             url: urlPageSuivante,
-            timeout: 5000,
+            timeout: 8000,
             success: (data, textStatus, jqXHR) => {
+                this.rateLimitBackoffMs = 0;
                 const pageSuivante = $(jqXHR.responseText.substring(jqXHR.responseText.indexOf('<!DOCTYPE html')));
                 const postsSuivants = pageSuivante.find(this.class_msg).length;
 
@@ -1605,7 +1610,12 @@ extractPayloadGzip().then(payload => {
     this.page.scan();
     this.loop();
 }
-            }
+            },
+            error: (jqXHR) => {
+                if (jqXHR.status === 429) this.handleRateLimit(jqXHR);
+                this.loop();
+            },
+            complete: () => { this.isLoading = false; }
         });
     }
 
@@ -2308,9 +2318,38 @@ updateDesktopButtonPosition() {
     loop() {
         if (this.isStandby || this.isBlocked || this.is410) return;
         if (typeof this.idanalyse !== 'undefined') window.clearTimeout(this.idanalyse);
-        let duree = this.ongletActif ? 5000 : 10000;
+        const duree = this.retryDelayMs !== null
+            ? this.retryDelayMs
+            : (this.ongletActif ? 15000 : 30000);
+        this.retryDelayMs = null;
         this.oldInstance = this.instance;
         this.idanalyse = setTimeout(this.charger.bind(this), duree);
+    }
+
+    handleRateLimit(jqXHR) {
+        const retryAfter = jqXHR && jqXHR.getResponseHeader
+            ? jqXHR.getResponseHeader('Retry-After')
+            : null;
+        let serverDelay = 0;
+
+        if (retryAfter) {
+            const seconds = Number(retryAfter);
+            if (Number.isFinite(seconds) && seconds > 0) {
+                serverDelay = seconds * 1000;
+            } else {
+                const retryDate = Date.parse(retryAfter);
+                if (!Number.isNaN(retryDate)) serverDelay = Math.max(0, retryDate - Date.now());
+            }
+        }
+
+        const fallbackDelay = this.rateLimitBackoffMs
+            ? Math.min(this.rateLimitBackoffMs * 2, 300000)
+            : 60000;
+        const delay = Math.max(60000, serverDelay, fallbackDelay);
+
+        this.rateLimitBackoffMs = delay;
+        this.retryDelayMs = delay;
+        console.warn(`[TopicLive+] JVC limite les requêtes (429). Pause de ${Math.ceil(delay / 1000)} secondes.`);
     }
 
   majUrl(page) {
@@ -2435,6 +2474,7 @@ updateDesktopButtonPosition() {
                     TL.handleCloudflareBlock(); return;
                 }
                 if (this.oldInstance != this.instance) return;
+                this.rateLimitBackoffMs = 0;
                 blocChargement.removeClass('topiclive-loading').addClass('topiclive-loaded');
                 cb($(responseText.substring(responseText.indexOf('<!DOCTYPE html>'))));
               this.updateActionsMapFromHtml(responseText);
@@ -2444,6 +2484,7 @@ updateDesktopButtonPosition() {
             error: (jqXHR) => {
                 if (jqXHR.status === 403 && jqXHR.responseText.includes('Cloudflare')) { TL.handleCloudflareBlock(); return; }
                 if (jqXHR.status === 410) { TL.handle410Error(); return; }
+                if (jqXHR.status === 429) TL.handleRateLimit(jqXHR);
                 TL.loop();
             },
             complete: () => { this.isLoading = false; }
@@ -2506,34 +2547,6 @@ for (const msg of payload.listMessage) {
         this.idForumAnalyse = setTimeout(this.chargerForum.bind(this), duree);
     }
 
-  pollConnectedCounter() {
-    const instanceAuLancement = this.instance;
-
-    const executer = () => {
-        if (instanceAuLancement !== this.instance) return;
-
-        if (this.isStandby) {
-            this.idCounterPoll = setTimeout(executer, 15000);
-            return;
-        }
-
-        $.ajax({
-            type: 'GET',
-            url: this.url,
-            timeout: 5000,
-            success: (data, textStatus, jqXHR) => {
-                if (instanceAuLancement !== this.instance) return;
-                this.updateActionsMapFromHtml(jqXHR.responseText);
-            },
-            complete: () => {
-                if (instanceAuLancement !== this.instance) return;
-                this.idCounterPoll = setTimeout(executer, 15000);
-            }
-        });
-    };
-
-    executer();
-}
 
     chargerForum() {
         if (this.isLoading) return;
@@ -2565,3 +2578,4 @@ for (const msg of payload.listMessage) {
 
 var TL = new TopicLive();
 TL.initStatic();
+
