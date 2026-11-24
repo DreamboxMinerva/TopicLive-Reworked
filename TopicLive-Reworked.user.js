@@ -4,18 +4,21 @@
 // @description   Affiche les nouveaux messages d'un topic en direct.
 // @author        StrangerFruit, Meshuggah_93, khhyrt2, sur une base de : moyaona, lantea/atlantis, kiwec
 // @match         https://www.jeuxvideo.com/forums/*
-// @updateURL   https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js
-// @downloadURL https://raw.githubusercontent.com/DreamboxMinerva/TopicLive-Reworked/main/TopicLive-Reworked.user.js
 // @run-at        document-end
 // @require       https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js
 // @icon          https://image.noelshack.com/fichiers/2026/25/5/1781893261-logo.png
-// @version       1.0.7
+// @version       1.0.9
 // @grant         GM_xmlhttpRequest
 // @connect       raw.githubusercontent.com
 // @noframes
 // ==/UserScript==
 
 
+
+/*
+ * 1.0.9 : polling adaptatif prudent inspiré de JVChat Premium, suppression
+ * du polling séparé du compteur, backoff HTTP 429 avec prise en compte Retry-After.
+ */
 
 /**
  * Représente une page de topic et gère l'analyse du DOM pour en extraire les messages.
@@ -1313,9 +1316,6 @@ class Favicon {
 class TopicLive {
     constructor() {
         this.isLoading = false;
-        // Polling plus espacé et temporisation adaptative en cas de HTTP 429.
-        this.retryDelayMs = null;
-        this.rateLimitBackoffMs = 0;
         this.instance = 0;
         this.ongletActif = !document.hidden;
         this.unreadMessageAnchors = [];
@@ -1339,6 +1339,13 @@ class TopicLive {
         this.changelogContent = null;
 
         this.estSurDernierePage = false;
+
+        // Polling adaptatif inspiré de JVChat Premium (cadences volontairement prudentes).
+        this.pollIntervals = [10000, 15000, 20000, 30000, 45000, 60000];
+        this.pollIntervalIndex = 0;
+        this.retryDelayMs = null;
+        this.rateLimitBackoffMs = 0;
+        this.lastObservedUnreadCount = 0;
 
     }
 
@@ -1451,7 +1458,16 @@ updateSelectionBar() {
 
     charger() {
         if (this.oldInstance != this.instance) return;
-        TL.GET(data => { new Page(data).scan(); });
+        const unreadBefore = this.nvxMessages || 0;
+        TL.GET(data => {
+            new Page(data).scan();
+            const unreadAfter = this.nvxMessages || 0;
+            if (unreadAfter > unreadBefore) {
+                this.pollIntervalIndex = 0;
+            } else {
+                this.pollIntervalIndex = Math.min(this.pollIntervalIndex + 1, this.pollIntervals.length - 1);
+            }
+        });
     }
 
     init() {
@@ -1497,11 +1513,11 @@ updateSelectionBar() {
 
         this.isForumPage = false;
         this.instance++;
+        window.clearTimeout(this.idCounterPoll);
         this.ajaxTs = $('#ajax_timestamp_liste_messages').val();
         this.ajaxHash = $('#ajax_hash_liste_messages').val();
         this.estMP = false;
         this.url = document.URL;
-        window.clearTimeout(this.idCounterPoll);
 
 this.messagesActionsMap = {};
 this.messagesTextMap = {};
@@ -1588,9 +1604,8 @@ extractPayloadGzip().then(payload => {
         $.ajax({
             type: 'GET',
             url: urlPageSuivante,
-            timeout: 8000,
+            timeout: 15000,
             success: (data, textStatus, jqXHR) => {
-                this.rateLimitBackoffMs = 0;
                 const pageSuivante = $(jqXHR.responseText.substring(jqXHR.responseText.indexOf('<!DOCTYPE html')));
                 const postsSuivants = pageSuivante.find(this.class_msg).length;
 
@@ -1599,20 +1614,18 @@ extractPayloadGzip().then(payload => {
                 const pageVoulue = pageActuelle + 1;
                 const estRedirection = pageRetournee !== null && pageRetournee !== pageVoulue;
 
-              if (postsSuivants > 0 && !estRedirection) {
-    // Une page suivante existe : on bascule le suivi dessus.
-    this.estSurDernierePage = false;
-    this.url = urlPageSuivante;
-    this.page.scan();
-    this.loop();
-} else {
-    this.estSurDernierePage = true;
-    this.page.scan();
-    this.loop();
-}
+                if (postsSuivants > 0 && !estRedirection) {
+
+                } else {
+                    this.estSurDernierePage = true;
+                    this.page.scan();
+                    this.loop();
+                }
             },
             error: (jqXHR) => {
-                if (jqXHR.status === 429) this.handleRateLimit(jqXHR);
+                if (jqXHR && jqXHR.status === 429) this.handleRateLimit(jqXHR);
+                this.estSurDernierePage = true;
+                this.page.scan();
                 this.loop();
             },
             complete: () => { this.isLoading = false; }
@@ -1971,38 +1984,40 @@ extractPayloadGzip().then(payload => {
         $('#tl-changelog-close').on('click', closeChangelog);
         $changelogOverlay.on('click', closeChangelog);
 
-      // ── Bouton settings dans la navbar JVC ──
-const observer = new MutationObserver(() => {
+ // ── Bouton settings dans la navbar JVC ──
+const attachSettingsButton = () => {
     const targetContainers = document.querySelectorAll(
-    '.buttonsNavbar__sticky .buttonsNavbar'
-);
+        '.buttonsNavbar__sticky .buttonsNavbar'
+    );
 
     targetContainers.forEach(container => {
 
+        // Évite de créer plusieurs boutons
         if (container.querySelector('.tl-settings-button')) return;
 
         const button = document.createElement('button');
+
         button.type = 'button';
         button.className = 'buttonsNavbar__button tl-settings-button';
         button.title = 'Paramètres TopicLive+';
 
+        button.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 width="17.5"
+                 height="17.5"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="3"
+                 stroke-linecap="round"
+                 stroke-linejoin="round"
+                 class="buttonsNavbar__icon">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
 
+            <div class="buttonsNavbar__label">TopicLive</div>
+        `;
 
-button.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg"
-         width="17.5"
-         height="17.5"
-         viewBox="0 0 24 24"
-         fill="none"
-         stroke="currentColor"
-         stroke-width="3"
-         stroke-linecap="round"
-         stroke-linejoin="round"
-         class="buttonsNavbar__icon">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-    </svg>
-    <div class="buttonsNavbar__label">TopicLive</div>
-`;
         button.onclick = () => {
             this.populateSettings();
             this.$tl_settings_modal.show();
@@ -2011,12 +2026,28 @@ button.innerHTML = `
 
         container.appendChild(button);
     });
+};
+
+
+// ── Première tentative immédiate ──
+attachSettingsButton();
+
+
+// ── Surveillance des changements du DOM ──
+const observer = new MutationObserver(() => {
+    attachSettingsButton();
 });
 
 observer.observe(document.body, {
     childList: true,
     subtree: true
 });
+
+
+// ── Filets de sécurité ──
+setTimeout(attachSettingsButton, 500);
+setTimeout(attachSettingsButton, 1500);
+setTimeout(attachSettingsButton, 3000);
     }
 
     populateSettings() {
@@ -2318,10 +2349,16 @@ updateDesktopButtonPosition() {
     loop() {
         if (this.isStandby || this.isBlocked || this.is410) return;
         if (typeof this.idanalyse !== 'undefined') window.clearTimeout(this.idanalyse);
-        const duree = this.retryDelayMs !== null
+
+        let duree = this.retryDelayMs !== null
             ? this.retryDelayMs
-            : (this.ongletActif ? 15000 : 30000);
-        this.retryDelayMs = null;
+            : this.pollIntervals[this.pollIntervalIndex];
+
+        // En arrière-plan, on évite les requêtes trop fréquentes.
+        if (!this.ongletActif && this.retryDelayMs === null) {
+            duree = Math.max(duree, 20000);
+        }
+
         this.oldInstance = this.instance;
         this.idanalyse = setTimeout(this.charger.bind(this), duree);
     }
@@ -2334,22 +2371,21 @@ updateDesktopButtonPosition() {
 
         if (retryAfter) {
             const seconds = Number(retryAfter);
-            if (Number.isFinite(seconds) && seconds > 0) {
+            if (Number.isFinite(seconds) && seconds >= 0) {
                 serverDelay = seconds * 1000;
             } else {
                 const retryDate = Date.parse(retryAfter);
-                if (!Number.isNaN(retryDate)) serverDelay = Math.max(0, retryDate - Date.now());
+                if (Number.isFinite(retryDate)) serverDelay = Math.max(0, retryDate - Date.now());
             }
         }
 
-        const fallbackDelay = this.rateLimitBackoffMs
+        this.rateLimitBackoffMs = this.rateLimitBackoffMs
             ? Math.min(this.rateLimitBackoffMs * 2, 300000)
             : 60000;
-        const delay = Math.max(60000, serverDelay, fallbackDelay);
 
-        this.rateLimitBackoffMs = delay;
-        this.retryDelayMs = delay;
-        console.warn(`[TopicLive+] JVC limite les requêtes (429). Pause de ${Math.ceil(delay / 1000)} secondes.`);
+        // Retry-After prévaut toujours, même s'il dépasse notre plafond de backoff.
+        this.retryDelayMs = Math.max(serverDelay, this.rateLimitBackoffMs);
+        console.warn(`[TopicLive+] HTTP 429 : nouvelle tentative dans ${Math.ceil(this.retryDelayMs / 1000)} s.`);
     }
 
   majUrl(page) {
@@ -2467,13 +2503,14 @@ updateDesktopButtonPosition() {
         blocChargement.addClass('topiclive-loading');
         window.clearTimeout(this.idanalyse);
         $.ajax({
-            type: 'GET', url: this.url, timeout: 5000,
+            type: 'GET', url: this.url, timeout: 15000,
             success: (data, textStatus, jqXHR) => {
                 const responseText = jqXHR.responseText;
                 if (responseText.includes('id="cf-challenge-form"') || responseText.includes('<title>Just a moment...</title>')) {
                     TL.handleCloudflareBlock(); return;
                 }
                 if (this.oldInstance != this.instance) return;
+                this.retryDelayMs = null;
                 this.rateLimitBackoffMs = 0;
                 blocChargement.removeClass('topiclive-loading').addClass('topiclive-loaded');
                 cb($(responseText.substring(responseText.indexOf('<!DOCTYPE html>'))));
@@ -2482,9 +2519,14 @@ updateDesktopButtonPosition() {
                 TL.loop();
             },
             error: (jqXHR) => {
-                if (jqXHR.status === 403 && jqXHR.responseText.includes('Cloudflare')) { TL.handleCloudflareBlock(); return; }
+                if (jqXHR.status === 403 && (jqXHR.responseText || '').includes('Cloudflare')) { TL.handleCloudflareBlock(); return; }
                 if (jqXHR.status === 410) { TL.handle410Error(); return; }
-                if (jqXHR.status === 429) TL.handleRateLimit(jqXHR);
+                if (jqXHR.status === 429) {
+                    this.handleRateLimit(jqXHR);
+                } else if (jqXHR.status === 0 || jqXHR.status >= 500) {
+                    // Incident réseau/serveur : temporisation ponctuelle sans accélérer le polling.
+                    this.retryDelayMs = Math.max(this.retryDelayMs || 0, 20000);
+                }
                 TL.loop();
             },
             complete: () => { this.isLoading = false; }
@@ -2578,4 +2620,3 @@ for (const msg of payload.listMessage) {
 
 var TL = new TopicLive();
 TL.initStatic();
-
